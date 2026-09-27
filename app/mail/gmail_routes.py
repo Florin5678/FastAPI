@@ -6,10 +6,10 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.core.database import get_db
 from app.models import User, Email
-from app.gmail_auth import get_valid_access_token
-from app.security import get_current_user
+from app.mail.gmail_client import get_valid_access_token
+from app.core.security import get_current_user
 
 router = APIRouter()
 

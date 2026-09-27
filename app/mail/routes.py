@@ -1,12 +1,13 @@
+"""Stored emails, summaries and the daily digest (the Email widget's full views)."""
 from datetime import datetime, time, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.core.database import get_db
 from app.models import Email, User
-from app.security import get_current_user
-from app.summarize import get_client, analyze_email, summarize_pending
+from app.core.security import get_current_user
+from app.mail.summarize import get_client, analyze_email, summarize_pending
 
 router = APIRouter()
 
@@ -25,15 +26,6 @@ def _email_dict(e: Email, include_body: bool = False) -> dict:
     if include_body:
         data["full_body"] = e.full_body
     return data
-
-
-@router.get("/api/me")
-def me(user: User = Depends(get_current_user)):
-    return {
-        "email": user.email,
-        "name": user.name,
-        "summaries_enabled": get_client() is not None,
-    }
 
 
 @router.get("/emails")

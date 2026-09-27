@@ -1,6 +1,6 @@
 # Journal widget: write entries with an optional prompt and an optional mood emoji.
 #
-# Prompts come ONLY from journal_prompts.md (next to this file) so they can be edited
+# Prompts come ONLY from content/journal_prompts.md (repo root) so they can be edited
 # freely: one per line as "N. text — *idea*" under "## Section" headings. The file is
 # re-read whenever it changes. Entry text is Fernet-encrypted at rest (app/crypto.py).
 import random
@@ -15,14 +15,15 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.crypto import decrypt, encrypt
-from app.database import get_db
+from app.core.crypto import decrypt, encrypt
+from app.core.database import get_db
 from app.models import JournalEntry, User
-from app.security import get_current_user, journal_unlock_expires_at, require_journal_unlock
+from app.core.security import get_current_user, journal_unlock_expires_at, require_journal_unlock
 from app.widgets.registry import WidgetContext, WidgetDefinition, register, widget_row
 
 WIDGET_ID = "journal"
-PROMPTS_FILE = Path(__file__).with_name("journal_prompts.md")
+# Edit prompts in content/journal_prompts.md (repo root)
+PROMPTS_FILE = Path(__file__).resolve().parents[2] / "content" / "journal_prompts.md"
 RECENT_PROMPTS_AVOIDED = 30  # don't suggest a prompt answered in the last N entries
 PROMPT_LINE = re.compile(r"^(\d+)\.\s+(.+?)\s+—\s+\*(.+)\*\s*$")
 

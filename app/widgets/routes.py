@@ -10,9 +10,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.core.database import get_db
 from app.models import Integration, User
-from app.security import get_current_user
+from app.core.security import get_current_user
 from app.widgets import REGISTRY, WidgetContext, WidgetDefinition
 
 logger = logging.getLogger(__name__)

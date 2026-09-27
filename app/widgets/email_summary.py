@@ -3,7 +3,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import Email, User
-from app.summarize import get_client
+from app.mail.summarize import get_client
 from app.widgets.registry import ConfigField, WidgetContext, WidgetDefinition, register
 
 

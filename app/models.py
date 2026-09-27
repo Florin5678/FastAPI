@@ -4,7 +4,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
-from app.database import Base
+from app.core.database import Base
 
 
 class User(Base):
@@ -120,7 +120,7 @@ class NutritionDay(Base):
 
 class JournalEntry(Base):
     """A journal entry. `body` is Fernet-encrypted (app/crypto.py); the prompt is
-    stored as shown, so editing journal_prompts.md later doesn't change old entries."""
+    stored as shown, so editing content/journal_prompts.md later doesn't change old entries."""
     __tablename__ = "journal_entries"
     __table_args__ = (Index("ix_journal_entries_user_day", "user_id", "day"),)
 
@@ -128,7 +128,7 @@ class JournalEntry(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     day = Column(Date, nullable=False)  # the user's local date
 
-    prompt_id = Column(Integer, nullable=True)  # number in journal_prompts.md; null = free writing
+    prompt_id = Column(Integer, nullable=True)  # number in content/journal_prompts.md; null = free writing
     prompt_text = Column(Text, nullable=True)
     mood = Column(String(32), nullable=True)  # any emoji, optional
     body = Column(Text, nullable=False)  # encrypted
