@@ -44,7 +44,7 @@ def get_valid_access_token(db: Session, user_id: int) -> str:
         "client_secret": GOOGLE_CLIENT_SECRET,
         "refresh_token": refresh_token,
         "grant_type": "refresh_token",
-    })
+    }, timeout=15)
     new_tokens = response.json()
 
     new_access_token = new_tokens.get("access_token")

@@ -22,6 +22,34 @@ def _get_user(db: Session, email: str) -> User:
     return user
 
 
+def _get_access_token(db: Session, user: User) -> str:
+    """Token problems (none stored, refresh failed) mean the user must log in again."""
+    try:
+        return get_valid_access_token(db, user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+
+def _gmail_get(path: str, access_token: str, params: dict) -> dict:
+    """GET from the Gmail API, surfacing Google's error instead of a bare 500."""
+    response = requests.get(
+        f"{GMAIL_API}{path}",
+        headers={"Authorization": f"Bearer {access_token}"},
+        params=params,
+        timeout=15,
+    )
+    if not response.ok:
+        try:
+            google_error = response.json()
+        except ValueError:
+            google_error = response.text
+        raise HTTPException(
+            status_code=502,
+            detail={"gmail_status": response.status_code, "gmail_error": google_error},
+        )
+    return response.json()
+
+
 def _extract_body(payload: dict) -> str:
     """Gmail bodies are base64url-encoded and can be nested in multipart parts."""
     if payload.get("body", {}).get("data"):
@@ -46,43 +74,26 @@ def _header(headers: list, name: str) -> str:
 @router.get("/messages")
 def list_messages(email: str = Query(...), max_results: int = 10, db: Session = Depends(get_db)):
     user = _get_user(db, email)
-    access_token = get_valid_access_token(db, user.id)
+    access_token = _get_access_token(db, user)
 
-    response = requests.get(
-        f"{GMAIL_API}/messages",
-        headers={"Authorization": f"Bearer {access_token}"},
-        params={"maxResults": max_results},
-    )
-    response.raise_for_status()
-    return response.json()
+    return _gmail_get("/messages", access_token, {"maxResults": max_results})
 
 
 @router.get("/message/{message_id}")
 def get_message(message_id: str, email: str = Query(...), db: Session = Depends(get_db)):
     user = _get_user(db, email)
-    access_token = get_valid_access_token(db, user.id)
+    access_token = _get_access_token(db, user)
 
-    response = requests.get(
-        f"{GMAIL_API}/messages/{message_id}",
-        headers={"Authorization": f"Bearer {access_token}"},
-        params={"format": "full"},
-    )
-    response.raise_for_status()
-    return response.json()
+    return _gmail_get(f"/messages/{message_id}", access_token, {"format": "full"})
 
 
 @router.post("/sync/gmail")
 def sync_gmail(email: str = Query(...), max_results: int = 20, db: Session = Depends(get_db)):
     user = _get_user(db, email)
-    access_token = get_valid_access_token(db, user.id)
+    access_token = _get_access_token(db, user)
 
-    list_response = requests.get(
-        f"{GMAIL_API}/messages",
-        headers={"Authorization": f"Bearer {access_token}"},
-        params={"maxResults": max_results},
-    )
-    list_response.raise_for_status()
-    message_ids = [m["id"] for m in list_response.json().get("messages", [])]
+    list_data = _gmail_get("/messages", access_token, {"maxResults": max_results})
+    message_ids = [m["id"] for m in list_data.get("messages", [])]
 
     saved = 0
     for msg_id in message_ids:
@@ -91,13 +102,7 @@ def sync_gmail(email: str = Query(...), max_results: int = 20, db: Session = Dep
         if exists:
             continue
 
-        detail_response = requests.get(
-            f"{GMAIL_API}/messages/{msg_id}",
-            headers={"Authorization": f"Bearer {access_token}"},
-            params={"format": "full"},
-        )
-        detail_response.raise_for_status()
-        detail = detail_response.json()
+        detail = _gmail_get(f"/messages/{msg_id}", access_token, {"format": "full"})
 
         headers = detail.get("payload", {}).get("headers", [])
         subject = _header(headers, "Subject")
