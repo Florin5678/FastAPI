@@ -3,5 +3,4 @@ __pycache__/
 *.pyc
 .env
 .venv/
-Claude_instructions.md
 PROJECT_CONTEXT.md
