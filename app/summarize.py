@@ -11,7 +11,8 @@ from app.models import Email
 
 logger = logging.getLogger(__name__)
 
-CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-5")
+# Haiku keeps this at a few dollars a month; summaries don't need a bigger model
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-haiku-4-5")
 
 # Newsletters can be enormous; the start of an email is enough to summarize it
 MAX_BODY_CHARS = 20000
@@ -49,12 +50,9 @@ def analyze_email(client: anthropic.Anthropic, email: Email) -> Optional[EmailAn
     body = (email.full_body or email.snippet or "")[:MAX_BODY_CHARS]
     content = f"From: {email.sender}\nSubject: {email.subject}\n\n{body}"
 
-    response = client.beta.messages.parse(
+    response = client.messages.parse(
         model=CLAUDE_MODEL,
-        max_tokens=4000,
-        betas=["server-side-fallback-2026-07-01"],
-        fallbacks="default",
-        output_config={"effort": "low"},
+        max_tokens=1000,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": content}],
         output_format=EmailAnalysis,
