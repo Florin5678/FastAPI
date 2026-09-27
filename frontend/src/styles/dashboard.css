@@ -38,3 +38,15 @@
 .catalog-text { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .catalog-item.on { border-color: var(--accent); background: var(--accent-soft); }
 .catalog + .dialog-actions { margin-top: 14px; }
+
+/* Shared widget pieces: progress bars (Nutrition, Gym, Language) and item lists */
+.bar { height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; min-width: 40px; }
+.bar-fill { display: block; height: 100%; border-radius: inherit; transition: width 0.4s ease, background-color 0.3s; }
+.bar-fill.progress { background: #f2b705; }
+.bar-fill.done { background: #22a559; }
+.bar-fill.under-limit { background: #22a559; }
+.bar-fill.over { background: #e04141; }
+.item-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.item-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; font-size: 13px; }
+.item-list li + li { border-top: 1px solid var(--border); }
+.item-name { min-width: 0; }

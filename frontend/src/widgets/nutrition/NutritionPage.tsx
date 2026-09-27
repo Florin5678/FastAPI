@@ -4,7 +4,8 @@ import {
   type NutrientRow, type NutritionDayData, type NutritionHistory,
 } from '../../api'
 import { AddFoodDialog } from './AddFoodDialog'
-import { barState, fmt, FoodLog, NutrientBars } from './NutritionParts'
+import { FoodLog, NutrientBars } from './NutritionParts'
+import { barState, fmt } from './nutrients'
 
 const RANGES = [7, 14, 30, 90]
 

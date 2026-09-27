@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { journalApi, localDate, type JournalEntry, type JournalPrompt } from '../../api'
+import { QUICK_MOODS } from './moods'
 
-export const QUICK_MOODS = ['😄', '🙂', '😐', '😔', '😢', '😠', '😰', '😴', '🥰', '💪']
 
 type Props = {
   initialPrompt: JournalPrompt | null

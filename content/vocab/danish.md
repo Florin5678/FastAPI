@@ -1,0 +1,169 @@
+# Danish vocabulary for the Language widget
+
+One word or phrase per line as `- Danish — English`. New words are introduced in
+this order (a few per day); add your own lines anywhere. The Danish text identifies
+a card, so editing it starts that card fresh. Nouns show en/et (common/neuter gender).
+
+## Words
+
+- hej — hi
+- farvel — goodbye
+- godmorgen — good morning
+- godnat — good night
+- tak — thank you
+- mange tak — thank you very much
+- selv tak — you're welcome (reply to thanks)
+- undskyld — sorry / excuse me
+- ja — yes
+- nej — no
+- Hvordan har du det? — How are you?
+- det er fint — that's fine
+- vi ses — see you
+- velkommen — welcome
+- skål — cheers
+- hyggeligt — cosy / nice
+- at være — to be
+- at have — to have
+- at gøre — to do
+- at gå — to walk / to go
+- at komme — to come
+- at sige — to say
+- at kunne — to be able to (can)
+- at ville — to want to
+- at vide — to know (facts)
+- at kende — to know (people, places)
+- at se — to see
+- at give — to give
+- at tale — to speak
+- at spise — to eat
+- at drikke — to drink
+- at bo — to live (reside)
+- at arbejde — to work
+- at studere — to study
+- at lære — to learn / to teach
+- at skrive — to write
+- at læse — to read / to study (at university)
+- at sove — to sleep
+- at tænke — to think
+- at have brug for — to need
+- at kunne lide — to like
+- at ringe — to call (phone)
+- at vente — to wait
+- at lede efter — to look for
+- at finde — to find
+- at åbne — to open
+- at lukke — to close
+- at købe — to buy
+- at betale — to pay
+- at forstå — to understand
+- at begynde — to begin
+- at slutte — to end / to finish
+- at løbe — to run
+- at cykle — to cycle
+- at lave mad — to cook
+- at hjælpe — to help
+- at spille — to play (a game, an instrument)
+- at køre — to drive
+- vand — water
+- brød — bread
+- mælk — milk
+- kaffe — coffee
+- mad — food
+- en fisk — a fish
+- frugt — fruit
+- en grøntsag — a vegetable
+- et æg — an egg
+- ris — rice
+- et hus — a house
+- en by — a town / a city
+- en gade — a street
+- et arbejde — a job / work
+- en skole — a school
+- et universitet — a university
+- en bog — a book
+- et bord — a table
+- en stol — a chair
+- en dør — a door
+- et vindue — a window
+- en bil — a car
+- et tog — a train
+- et fly — a plane
+- en cykel — a bicycle
+- en butik — a shop
+- penge — money
+- tid — time
+- vejret — the weather
+- en dag — a day
+- en nat — a night
+- en uge — a week
+- en måned — a month
+- et år — a year
+- i dag — today
+- i morgen — tomorrow
+- i går — yesterday
+- nu — now
+- altid — always
+- aldrig — never
+- en familie — a family
+- en mor — a mother
+- en far — a father
+- en bror — a brother
+- en søster — a sister
+- en ven — a friend (male)
+- en veninde — a friend (female)
+- en hund — a dog
+- en kat — a cat
+- en krop — a body
+- et hoved — a head
+- en hånd — a hand
+- et hjerte — a heart
+- solen — the sun
+- regn — rain
+- havet — the sea
+- en strand — a beach
+- et fitnesscenter — a gym
+- stor — big
+- lille — small
+- god — good
+- dårlig — bad
+- ny — new
+- gammel — old
+- glad — happy
+- ked af det — sad
+- træt — tired
+- hurtig — fast
+- langsom — slow
+- varm — warm / hot
+- kold — cold
+- nem — easy
+- svær — difficult
+- smuk — beautiful
+- dyr — expensive
+- billig — cheap
+- meget — very / much
+- lidt — a little
+- en / et — one
+- to — two
+- tre — three
+- fire — four
+- fem — five
+- seks — six
+- syv — seven
+- otte — eight
+- ni — nine
+- ti — ten
+- hundrede — one hundred
+- tusind — one thousand
+- rød — red
+- blå — blue
+- grøn — green
+- gul — yellow
+- sort — black
+- hvid — white
+- hvad? — what?
+- hvem? — who?
+- hvor? — where?
+- hvornår? — when?
+- hvorfor? — why?
+- hvordan? — how?
+- hvor meget? — how much?

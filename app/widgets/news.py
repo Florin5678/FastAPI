@@ -155,11 +155,18 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     }
 
 
+def brief(data: dict) -> str:
+    lines = [f"Latest {data['topic']} headlines:"]
+    lines += [f"- {i['title']} ({i['source']})" for i in data["items"][:6]]
+    return "\n".join(lines)
+
+
 register(WidgetDefinition(
     id="news",
     name="News",
     description="Latest headlines on AI, tech, science, world, European and Romanian news from public RSS feeds.",
     fetch=fetch,
+    brief=brief,
     default_size=(8, 8),
     min_size=(4, 6),
     refresh_seconds=900,

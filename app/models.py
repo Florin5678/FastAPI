@@ -135,3 +135,40 @@ class JournalEntry(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Workout(Base):
+    """A logged workout (Gym widget)."""
+    __tablename__ = "workouts"
+    __table_args__ = (Index("ix_workouts_user_day", "user_id", "day"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    day = Column(Date, nullable=False)  # the user's local date
+    kind = Column(String(32), nullable=False)  # e.g. "Push", "Pull", "Legs", "Cardio"
+    minutes = Column(Integer, nullable=False)
+    note = Column(String(300), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class VocabCard(Base):
+    """Spaced-repetition state of one word for one user (Language widget). Words
+    themselves live in content/vocab/<language>.md; `word` is the target-language
+    text, which identifies the card."""
+    __tablename__ = "vocab_cards"
+    __table_args__ = (
+        UniqueConstraint("user_id", "language", "word", name="uq_vocab_cards_user_language_word"),
+        Index("ix_vocab_cards_user_language_due", "user_id", "language", "due"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    language = Column(String(16), nullable=False)  # "spanish" | "danish"
+    word = Column(String(120), nullable=False)
+    interval_days = Column(Integer, nullable=False, default=0)
+    ease = Column(Float, nullable=False, default=2.5)
+    due = Column(Date, nullable=False)
+    reps = Column(Integer, nullable=False, default=0)
+    lapses = Column(Integer, nullable=False, default=0)
+    introduced_on = Column(Date, nullable=False)  # first seen (limits new words per day)
+    last_reviewed_at = Column(DateTime, nullable=True)

@@ -3,15 +3,15 @@
 # Cloud Console and one sign-in after the scope was added; until then the widget shows
 # what to do instead of an error.
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Optional
 from urllib.parse import quote
-from zoneinfo import ZoneInfo
 
 import requests
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.timeutil import local_zone
 from app.auth.google_tokens import get_valid_access_token
 from app.models import User
 from app.widgets.registry import ConfigField, WidgetContext, WidgetDefinition, register
@@ -40,13 +40,6 @@ def _get(path: str, token: str, params: Optional[dict] = None) -> dict:
     return response.json()
 
 
-def _zone(tz: Optional[str]):
-    try:
-        return ZoneInfo(tz) if tz else timezone.utc
-    except Exception:
-        return timezone.utc
-
-
 def _event(e: dict, calendar: dict) -> Optional[dict]:
     if e.get("status") == "cancelled":
         return None
@@ -67,7 +60,7 @@ def _event(e: dict, calendar: dict) -> Optional[dict]:
 
 
 def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
-    zone = _zone(ctx.tz)
+    zone = local_zone(ctx.tz)
     now = datetime.now(zone)
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     end = start + timedelta(days=settings["days"])
@@ -114,11 +107,24 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     }
 
 
+def brief(data: dict) -> str:
+    if data["needs_setup"]:
+        return "Calendar not connected yet."
+    if not data["events"]:
+        return f"No events in the next {data['days']} day(s)."
+    lines = [f"Upcoming events (next {data['days']} days):"]
+    for e in data["events"][:12]:
+        when = f"{e['start']} (all day)" if e["all_day"] else e["start"]
+        lines.append(f"- {when}: {e['title']}" + (f" at {e['location']}" if e["location"] else ""))
+    return "\n".join(lines)
+
+
 register(WidgetDefinition(
     id="calendar",
     name="Calendar",
     description="Your upcoming Google Calendar events (read-only), from all calendars you have selected.",
     fetch=fetch,
+    brief=brief,
     default_size=(4, 8),
     min_size=(3, 5),
     refresh_seconds=600,

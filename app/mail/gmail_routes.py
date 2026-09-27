@@ -21,7 +21,7 @@ def _get_access_token(db: Session, user: User) -> str:
     try:
         return get_valid_access_token(db, user.id)
     except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))
+        raise HTTPException(status_code=401, detail=str(e)) from e
 
 
 def _gmail_get(path: str, access_token: str, params: dict) -> dict:

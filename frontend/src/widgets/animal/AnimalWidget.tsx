@@ -45,20 +45,22 @@ function fromWikipedia(summary: WikiSummary): AnimalDetails {
 }
 
 export function AnimalWidget({ data }: WidgetProps<AnimalData>) {
-  const [fallback, setFallback] = useState<AnimalDetails | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // Browser fallback result, remembered per summary URL (a new animal simply has no result yet)
+  const [fallback, setFallback] = useState<{ url: string; details?: AnimalDetails; failed?: boolean } | null>(null)
 
   useEffect(() => {
     if (data.loaded) return
-    setFallback(null)
-    setError(null)
+    let cancelled = false
     fetch(data.summary_url, { headers: { Accept: 'application/json' } })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((summary: WikiSummary) => setFallback(fromWikipedia(summary)))
-      .catch(() => setError("Couldn't load today's animal from Wikipedia. Try again later."))
+      .then((summary: WikiSummary) => { if (!cancelled) setFallback({ url: data.summary_url, details: fromWikipedia(summary) }) })
+      .catch(() => { if (!cancelled) setFallback({ url: data.summary_url, failed: true }) })
+    return () => { cancelled = true }
   }, [data])
 
-  const details: AnimalDetails | null = data.loaded ? data : fallback
+  const current = !data.loaded && fallback?.url === data.summary_url ? fallback : null
+  const details: AnimalDetails | null = data.loaded ? data : current?.details ?? null
+  const error = current?.failed ? "Couldn't load today's animal from Wikipedia. Try again later." : null
 
   return (
     <div className="animal-widget">

@@ -116,3 +116,103 @@ prompt stirs up something heavy, it's fine to skip it. In a crisis, call
 98. What have you learned this month that you want to remember?
 99. What are you proud of that nobody else might notice?
 100. If you could keep only three things from this year, what would they be, and why?
+101. What small moment from today would you like to remember a year from now?
+102. What are you avoiding thinking about? What is one gentle step toward it?
+103. Which of your habits is quietly making your life better? Which one is quietly making it worse?
+104. When did you last feel truly rested? What made it possible?
+105. What would you do this week if you weren't worried about looking foolish?
+106. Describe a person who shaped who you are. What did they teach you, on purpose or not?
+107. What is something you believed five years ago that you no longer believe?
+108. Where do you feel most at home, and what makes it feel that way?
+109. What does a good day look like for you, hour by hour?
+110. What are you tolerating that you could change?
+111. What compliment have you received that you still think about? Why did it stay with you?
+112. What would you like to be known for by the people closest to you?
+113. Which emotion is hardest for you to show to others? What happens when you hide it?
+114. What is one thing you learned recently that surprised you?
+115. If you could give your younger self one piece of advice, what would it be?
+116. What is taking up energy in your mind that you could let go of today?
+117. Describe your body right now, from head to toe, without judging it.
+118. What does "enough" look like for you in work, money and ambition?
+119. Who could you thank today, and for what?
+120. What small risk could you take this week that would make life a little bigger?
+121. What have you been putting off because you want it to be perfect?
+122. When do you feel most like yourself?
+123. What would a kind friend point out about how you've been treating yourself lately?
+124. What is a problem you've been solving alone that you could ask for help with?
+125. Describe a place in nature that calms you. What do you notice there?
+126. What are you curious about right now, with no practical reason at all?
+127. How do you usually react when plans fall apart? What would you like to try instead?
+128. What part of your routine could use more play?
+129. Which relationship in your life needs more attention right now?
+130. What are you most looking forward to learning in the next year?
+131. What did today teach you about patience?
+132. When did you last change your mind about something important? What changed it?
+133. What would you stop doing if you trusted yourself more?
+134. What is something you own that holds a story? Tell it.
+135. What makes you feel capable?
+136. Which worry from last month turned out to be smaller than expected?
+137. How do you want to feel at the end of this week? What would help?
+138. What boundary did you keep or wish you had kept recently?
+139. Describe a meal that meant something to you. Who was there?
+140. What are you ready to forgive, in yourself or someone else?
+141. When you picture your life in ten years, what feels non-negotiable?
+142. What does your ideal Sunday look like?
+143. What have you done recently that you are quietly proud of?
+144. What drains you socially, and what recharges you?
+145. What does courage look like in your everyday life, not just in big moments?
+146. Which song, book or film matches your mood today, and why?
+147. What is a strength of yours that others notice before you do?
+148. What would change if you spoke to yourself the way you speak to your best friend?
+149. When did you last laugh until it hurt? What was happening?
+150. What have you been saying "yes" to that you'd like to say "no" to?
+151. What feels uncertain right now? What do you know for sure despite it?
+152. How has living in different places shaped the way you see the world?
+153. What tradition from your childhood would you like to keep alive?
+154. What makes a day feel wasted to you? Is that feeling fair?
+155. What did your body do for you today that you might have taken for granted?
+156. Describe someone you admire. Which of their qualities do you already have a little of?
+157. What are the three most important things on your plate this week, and why those?
+158. How do you handle criticism? What would a more helpful response look like?
+159. What is a mistake that ended up teaching you something valuable?
+160. What does taking care of your future self look like tonight?
+161. What would you like more of in your life: calm, adventure, connection or meaning? Why?
+162. Write about a time you surprised yourself.
+163. What does success look like to you, in your own words rather than anyone else's?
+164. What is something you want to say to someone but haven't? What's holding you back?
+165. What small ritual could make your mornings better?
+166. Which of your recent choices came from fear, and which from what you value?
+167. What do you miss, and what does missing it tell you about what matters to you?
+168. How are you different from the person you were at the start of this year?
+169. What is one thing you can do tomorrow to make someone else's day a little easier?
+170. Where in your life are you waiting for permission? Whose?
+171. What helps you come back to yourself after a hard day?
+172. What are you learning about how you learn?
+173. If today had a title, what would it be?
+174. What would you like to let go of before the end of this month?
+175. What feels light in your life right now? What feels heavy?
+176. When did you last feel proud of how you handled a conflict?
+177. What would your life look like with 10% more rest in it?
+178. Which of your beliefs about money came from your family? Do they still fit you?
+179. What does a healthy relationship with your phone look like for you?
+180. Name one thing you're good at that you rarely give yourself credit for.
+181. What is your body asking you for this week?
+182. What would you create if no one ever had to see it?
+183. How do you know when you need a break? What do you usually do instead?
+184. Who in your life makes you feel understood? How could you tell them?
+185. What has been going well lately that you haven't noticed enough?
+186. If a stranger read your calendar for this week, what would they think you value?
+187. What would be different if you let yourself be a beginner at something?
+188. What questions are you living with right now, without needing an answer yet?
+189. What is one kind thing you did today, however small?
+190. What did you need to hear today that nobody said? Say it to yourself.
+191. How do you want to spend your energy in the coming season?
+192. What are you grateful for about where you live right now?
+193. What would make tomorrow 1% better than today?
+194. What role does discipline play in your life, and where would gentleness work better?
+195. What stories do you tell yourself when things go wrong? Are they true?
+196. What would you like to celebrate this week, even if it seems small?
+197. Describe a moment when you felt connected to something bigger than yourself.
+198. What is your relationship with rest: earned, allowed or avoided?
+199. What would you like to do more slowly?
+200. Looking back on this week, what are you taking with you, and what are you leaving behind?

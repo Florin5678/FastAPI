@@ -3,7 +3,8 @@ import {
   isJournalLocked, journalApi, localDate, shiftDay,
   type JournalAccess, type JournalEntry, type JournalHistory, type JournalPrompt, type MoodMonth,
 } from '../../api'
-import { JournalComposer, QUICK_MOODS } from './JournalComposer'
+import { JournalComposer } from './JournalComposer'
+import { QUICK_MOODS } from './moods'
 import { MoodMonths } from './MoodMonths'
 
 const RANGES: { label: string; days: number }[] = [

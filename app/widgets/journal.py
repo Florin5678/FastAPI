@@ -11,13 +11,13 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.timeutil import local_today
 from app.core.crypto import decrypt, encrypt
 from app.core.database import get_db
 from app.models import JournalEntry, User
@@ -63,13 +63,6 @@ def pick_prompt(db: Session, user: User, exclude: Optional[int] = None) -> Optio
     return random.choice(pool)
 
 
-def _today(tz: Optional[str]) -> date:
-    try:
-        return datetime.now(ZoneInfo(tz)).date() if tz else datetime.now(timezone.utc).date()
-    except Exception:
-        return datetime.now(timezone.utc).date()
-
-
 def _entry_dict(e: JournalEntry) -> dict:
     return {
         "id": e.id,
@@ -99,7 +92,7 @@ def _streak(db: Session, user: User, today: date) -> int:
 
 
 def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
-    today = _today(ctx.tz)
+    today = local_today(ctx.tz)
     todays = (
         db.query(JournalEntry)
         .filter(JournalEntry.user_id == user.id, JournalEntry.day == today)

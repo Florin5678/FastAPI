@@ -33,11 +33,6 @@ def _rows(db: Session, user: User) -> list[Integration]:
     return db.query(Integration).filter(Integration.user_id == user.id).all()
 
 
-def _settings(definition: WidgetDefinition, row: Integration) -> dict:
-    # Defaults first, so settings added to a widget later get a value
-    saved = (row.config or {}).get("settings", {})
-    known = {f.key for f in definition.config_fields}
-    return {**definition.default_settings(), **{k: v for k, v in saved.items() if k in known}}
 
 
 def _layout(definition: WidgetDefinition, row: Integration) -> dict:
@@ -93,7 +88,7 @@ def _set_config(row: Integration, **changes: Any) -> None:
 def _widget_out(definition: WidgetDefinition, row: Integration) -> dict:
     return {
         **definition.manifest(),
-        "settings": _settings(definition, row),
+        "settings": definition.settings_for(row),
         "layout": _layout(definition, row),
     }
 
@@ -199,14 +194,14 @@ def update_settings(
     row = _active_row(db, user, widget_id)
     fields = {f.key: f for f in definition.config_fields}
 
-    new_settings = _settings(definition, row)
+    new_settings = definition.settings_for(row)
     for key, value in body.settings.items():
         if key not in fields:
             raise HTTPException(status_code=422, detail=f"Unknown setting {key!r}")
         try:
             new_settings[key] = fields[key].validate(value)
         except ValueError as e:
-            raise HTTPException(status_code=422, detail=str(e))
+            raise HTTPException(status_code=422, detail=str(e)) from e
 
     _set_config(row, settings=new_settings)
     db.commit()
@@ -280,7 +275,7 @@ def widget_data(
 
     now = datetime.now(timezone.utc).isoformat()
     try:
-        data = definition.fetch(db, user, _settings(definition, row), ctx)
+        data = definition.fetch(db, user, definition.settings_for(row), ctx)
     except HTTPException as e:
         return {"status": "error", "error": str(e.detail), "data": None, "last_updated": now}
     except Exception:

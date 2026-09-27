@@ -1,0 +1,35 @@
+/* Gym widget */
+.gym-widget { display: flex; flex-direction: column; gap: 10px; }
+.gym-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.gym-log { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 10px; background: var(--surface-2); }
+.gym-log-row { display: flex; gap: 8px; align-items: center; }
+.gym-minutes { display: flex; align-items: center; gap: 4px; }
+.gym-minutes input, .gym-note {
+  height: 32px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font: inherit; font-size: 14px;
+}
+.gym-minutes input { width: 64px; }
+.gym-note { flex: 1; min-width: 0; }
+.gym-log .dialog-actions { margin-top: 0; }
+.gym-goal { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.gym-goal-top { display: flex; justify-content: space-between; font-weight: 550; }
+.gym-goal-value { color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 400; }
+.gym-goal-value.met { color: #1a8a4a; font-weight: 650; }
+.gym-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.gym-day {
+  height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 8px;
+  background: var(--surface-2); color: var(--muted); font-size: 12px; font-weight: 600;
+}
+.gym-day.trained { background: #22a559; color: #fff; }
+.gym-day.today { box-shadow: inset 0 0 0 2px var(--accent); }
+.gym-day.future { opacity: 0.5; }
+.gym-weeks { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; height: 64px; align-items: end; }
+.gym-week-col { display: flex; flex-direction: column; align-items: center; gap: 3px; height: 100%; }
+.gym-week-bar { flex: 1; width: 100%; max-width: 22px; display: flex; align-items: flex-end; border-radius: 4px; background: var(--surface-2); }
+.gym-week-fill { width: 100%; min-height: 2px; border-radius: 4px 4px 0 0; background: #f2b705; }
+.gym-week-fill.met { background: #22a559; }
+.gym-week-label { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.gym-list { margin-top: 2px; }
+@media (prefers-color-scheme: dark) {
+  .gym-goal-value.met { color: #5fd08e; }
+}

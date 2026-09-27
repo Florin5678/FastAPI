@@ -9,16 +9,15 @@ import logging
 import random
 import re
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
-from zoneinfo import ZoneInfo
 
 import requests
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.timeutil import local_today
 from app.models import User
 from app.widgets.registry import WidgetContext, WidgetDefinition, register
 
@@ -43,13 +42,6 @@ def load_animals() -> list[str]:
         random.Random(2026).shuffle(names)
         _animals_cache.update(mtime=mtime, animals=names)
     return _animals_cache["animals"]
-
-
-def _local_date(tz: Optional[str]):
-    try:
-        return datetime.now(ZoneInfo(tz)).date() if tz else datetime.now(timezone.utc).date()
-    except Exception:
-        return datetime.now(timezone.utc).date()
 
 
 def _summary_url(name: str) -> str:
@@ -99,7 +91,7 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     animals = load_animals()
     if not animals:
         raise HTTPException(status_code=500, detail="content/animals.md has no animals")
-    today = _local_date(ctx.tz)
+    today = local_today(ctx.tz)
     name = animals[today.toordinal() % len(animals)]
     summary = _summary(name)
     if summary is None:
@@ -119,11 +111,16 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     }
 
 
+def brief(data: dict) -> str:
+    return f"Animal of the day: {data['name']}."
+
+
 register(WidgetDefinition(
     id="animal",
     name="Animal of the day",
     description="A different animal every day, with a photo and facts from Wikipedia.",
     fetch=fetch,
+    brief=brief,
     default_size=(4, 8),
     min_size=(3, 6),
     refresh_seconds=3600,

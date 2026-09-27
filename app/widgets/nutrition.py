@@ -14,7 +14,6 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import quote, urlencode
-from zoneinfo import ZoneInfo
 
 import requests
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -22,6 +21,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.timeutil import local_today
 from app.core.database import get_db
 from app.models import NutritionDay, NutritionEntry, User
 from app.core.security import get_current_user
@@ -57,13 +57,6 @@ DEFAULT_GOALS = {
 GOAL_MAX = {"calories": 10000}
 
 _search_cache: dict[str, tuple[float, list]] = {}
-
-
-def _today(tz: Optional[str]) -> date:
-    try:
-        return datetime.now(ZoneInfo(tz)).date() if tz else datetime.now(timezone.utc).date()
-    except Exception:
-        return datetime.now(timezone.utc).date()
 
 
 def _latest_allowed_day() -> date:
@@ -118,7 +111,14 @@ def day_summary(db: Session, user: User, day: date) -> dict:
 
 
 def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
-    return day_summary(db, user, _today(ctx.tz))
+    return day_summary(db, user, local_today(ctx.tz))
+
+
+def brief(data: dict) -> str:
+    parts = [f"{n['label']} {round(n['actual'])}/{round(n['goal'])} {n['unit']}" + (" (limit)" if n["kind"] == "limit" else "")
+             for n in data["nutrients"]]
+    foods = ", ".join(e["name"] for e in data["entries"][:8]) or "nothing logged yet"
+    return f"Today's intake vs goals: {'; '.join(parts)}. Foods: {foods}."
 
 
 register(WidgetDefinition(
@@ -126,6 +126,7 @@ register(WidgetDefinition(
     name="Nutrition",
     description="Daily intake vs your goals (calories, protein, carbs, fat, fiber, sugar). Log meals from the USDA food database or by hand; every day is kept in your history.",
     fetch=fetch,
+    brief=brief,
     default_size=(4, 9),
     min_size=(3, 6),
     refresh_seconds=600,
@@ -291,7 +292,7 @@ def search_foods(q: str = Query(..., min_length=2, max_length=100), user: User =
     try:
         response = requests.get(url, timeout=15)
     except requests.RequestException:
-        raise HTTPException(status_code=502, detail="The food database didn't respond. Try again, or enter the values manually.")
+        raise HTTPException(status_code=502, detail="The food database didn't respond. Try again, or enter the values manually.") from None
     if response.status_code == 429:
         raise HTTPException(
             status_code=429,

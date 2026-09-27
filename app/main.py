@@ -13,7 +13,9 @@ from app.auth.account import router as account_router
 from app.auth.google_oauth import router as google_router
 from app.mail.gmail_routes import router as gmail_router
 from app.mail.routes import router as mail_router
+from app.widgets.gym import router as gym_router
 from app.widgets.journal import router as journal_router
+from app.widgets.language import router as language_router
 from app.widgets.notes import router as notes_router
 from app.widgets.nutrition import router as nutrition_router
 from app.widgets.routes import router as widget_router
@@ -74,6 +76,8 @@ app.include_router(widget_router, tags=["widgets"])  # generic widget registry, 
 app.include_router(nutrition_router)  # Nutrition widget: food log, history, USDA food search
 app.include_router(notes_router)  # Notes & reminders widget
 app.include_router(journal_router)  # Journal widget: entries, prompts, locked history
+app.include_router(gym_router)  # Gym widget: log / delete workouts
+app.include_router(language_router)  # Language widget: flashcard reviews
 
 # The React frontend (built into frontend/dist) is served from everything else
 FRONTEND_DIST = ROOT / "frontend" / "dist"

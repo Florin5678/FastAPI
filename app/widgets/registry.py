@@ -52,6 +52,8 @@ class WidgetContext:
 
 # (db, user, settings, ctx) -> widget-specific JSON-able data
 FetchFn = Callable[[Session, User, dict, WidgetContext], dict]
+# data returned by fetch -> a few plain-text lines for the Assistant's daily briefing
+BriefFn = Callable[[dict], str]
 
 
 @dataclass(frozen=True)
@@ -68,9 +70,18 @@ class WidgetDefinition:
     # bump get the new size and are re-placed; layouts saved after it are kept.
     layout_version: int = 1
     config_fields: tuple[ConfigField, ...] = field(default_factory=tuple)
+    # Optional: summarize this widget's data for the Assistant widget's briefing.
+    # Widgets without it (e.g. the private journal) are never included.
+    brief: Optional[BriefFn] = None
 
     def default_settings(self) -> dict:
         return {f.key: f.default for f in self.config_fields}
+
+    def settings_for(self, row: Integration) -> dict:
+        """The user's saved settings over the defaults (so settings added later get a value)."""
+        saved = (row.config or {}).get("settings", {})
+        known = {f.key for f in self.config_fields}
+        return {**self.default_settings(), **{k: v for k, v in saved.items() if k in known}}
 
     def manifest(self) -> dict:
         """What the frontend needs to know about this widget (no functions)."""

@@ -49,11 +49,22 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     }
 
 
+def brief(data: dict) -> str:
+    lines = [f"{data['today_total']} email(s) today."]
+    counts = ", ".join(f"{c['category']} {c['count']}" for c in data["categories"] if c["category"] != "unsummarized")
+    if counts:
+        lines.append(f"By category: {counts}.")
+    for e in data["latest"][:5]:
+        lines.append(f"- {e['sender'] or 'Unknown'}: {e['subject'] or '(no subject)'}" + (f" ({e['summary']})" if e["summary"] else ""))
+    return "\n".join(lines)
+
+
 register(WidgetDefinition(
     id="email_summary",
     name="Email",
     description="Today's mail at a glance: counts per category and your latest emails with their summaries.",
     fetch=fetch,
+    brief=brief,
     default_size=(4, 7),
     min_size=(3, 5),
     layout_version=3,  # v2: 6x9 -> 5x8 for weather; v3: 4x7 so email/weather/nutrition share a row

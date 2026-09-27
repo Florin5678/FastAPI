@@ -67,11 +67,23 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     return {"reminders": open_, "done": done, "notes": notes}
 
 
+def brief(data: dict) -> str:
+    if not data["reminders"]:
+        lines = ["No open reminders."]
+    else:
+        lines = ["Open reminders:"]
+        for r in data["reminders"][:10]:
+            lines.append(f"- {r['text']}" + (f" (due {r['due']})" if r["due"] else ""))
+    lines.append(f"{len(data['notes'])} note(s).")
+    return "\n".join(lines)
+
+
 register(WidgetDefinition(
     id=WIDGET_ID,
     name="Notes & reminders",
     description="Quick notes and reminders with due dates; overdue and due-today reminders are highlighted.",
     fetch=fetch,
+    brief=brief,
     default_size=(4, 8),
     min_size=(3, 5),
     refresh_seconds=300,

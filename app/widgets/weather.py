@@ -82,7 +82,7 @@ def _forecast(city: str) -> dict:
     except requests.RequestException:
         if cached:
             return cached[1]  # stale beats nothing
-        raise HTTPException(status_code=502, detail="The weather service didn't respond. Try again in a minute.")
+        raise HTTPException(status_code=502, detail="The weather service didn't respond. Try again in a minute.") from None
 
     data = response.json()
     _cache[city] = (time.time(), data)
@@ -132,11 +132,21 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     }
 
 
+def brief(data: dict) -> str:
+    now, today = data["current"], data["today"]
+    return (
+        f"{data['city']}: {now['temperature']}°C, {now['weather']['label'].lower()} "
+        f"(feels like {now['feels_like']}°C). Today {today['low']}–{today['high']}°C, "
+        f"{today['precipitation_probability'] or 0}% chance of rain, wind {now['wind_kmh']} km/h."
+    )
+
+
 register(WidgetDefinition(
     id="weather",
     name="Weather",
     description="Today's weather for Aarhus or Bucharest (Open-Meteo, free).",
     fetch=fetch,
+    brief=brief,
     default_size=(4, 9),
     min_size=(3, 7),
     layout_version=3,  # v2: next to the narrower email widget; v3: taller for the skyline
