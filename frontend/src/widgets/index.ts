@@ -5,6 +5,7 @@ import { WeatherWidget } from './WeatherWidget'
 import { NutritionWidget } from './NutritionWidget'
 import { NotesWidget } from './NotesWidget'
 import { NewsWidget } from './NewsWidget'
+import { JournalWidget } from './JournalWidget'
 import type { WidgetUI } from './types'
 
 export const WIDGET_UI: Record<string, WidgetUI> = {
@@ -13,4 +14,5 @@ export const WIDGET_UI: Record<string, WidgetUI> = {
   nutrition: { icon: '🥗', component: NutritionWidget },
   notes: { icon: '📝', component: NotesWidget },
   news: { icon: '📰', component: NewsWidget },
+  journal: { icon: '📓', component: JournalWidget },
 }

@@ -116,3 +116,22 @@ class NutritionDay(Base):
     day = Column(Date, nullable=False)
     goals = Column(JSON, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class JournalEntry(Base):
+    """A journal entry. `body` is Fernet-encrypted (app/crypto.py); the prompt is
+    stored as shown, so editing journal_prompts.md later doesn't change old entries."""
+    __tablename__ = "journal_entries"
+    __table_args__ = (Index("ix_journal_entries_user_day", "user_id", "day"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    day = Column(Date, nullable=False)  # the user's local date
+
+    prompt_id = Column(Integer, nullable=True)  # number in journal_prompts.md; null = free writing
+    prompt_text = Column(Text, nullable=True)
+    mood = Column(String(32), nullable=True)  # any emoji, optional
+    body = Column(Text, nullable=False)  # encrypted
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

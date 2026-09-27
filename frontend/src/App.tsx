@@ -6,9 +6,10 @@ import { Inbox } from './components/Inbox'
 import { EmailDetail } from './components/EmailDetail'
 import { Dashboard } from './components/Dashboard'
 import { NutritionPage } from './components/NutritionPage'
+import { JournalPage } from './components/JournalPage'
 import type { DashboardActions } from './widgets/types'
 
-type Tab = 'home' | 'today' | 'inbox' | 'nutrition'
+type Tab = 'home' | 'today' | 'inbox' | 'nutrition' | 'journal'
 
 function greeting(): string {
   const hour = new Date().getHours()
@@ -123,6 +124,7 @@ export default function App() {
         {tab === 'home' && <Dashboard refreshKey={refreshKey} actions={actions} onNotice={showNotice} />}
         {tab === 'today' && <Digest refreshKey={refreshKey} onOpen={setOpenEmailId} />}
         {tab === 'nutrition' && <NutritionPage />}
+        {tab === 'journal' && <JournalPage />}
         {tab === 'inbox' && (
           <Inbox key={inboxCategory ?? 'all'} initialCategory={inboxCategory} refreshKey={refreshKey} onOpen={setOpenEmailId} />
         )}

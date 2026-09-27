@@ -210,3 +210,31 @@ export const notesApi = {
     request<Note>(`/widgets/notes/notes/${id}`, { method: 'PATCH', ...json(changes) }),
   deleteNote: (id: string) => request<unknown>(`/widgets/notes/notes/${id}`, { method: 'DELETE' }),
 }
+
+// ---- Journal widget ----
+
+export type JournalPrompt = { id: number; text: string; idea: string; source: string }
+
+export type JournalEntry = {
+  id: number
+  day: string
+  prompt_id: number | null
+  prompt_text: string | null
+  mood: string | null
+  body: string
+  created_at: string | null
+  updated_at: string | null
+}
+
+export const journalApi = {
+  prompt: (exclude?: number) => request<JournalPrompt>(`/widgets/journal/prompt${exclude ? `?exclude=${exclude}` : ''}`),
+  add: (entry: { day: string; body: string; prompt_id: number | null; mood: string | null }) =>
+    request<JournalEntry>('/widgets/journal/entries', { method: 'POST', ...json(entry) }),
+  list: (beforeId?: number, limit = 20) =>
+    request<{ entries: JournalEntry[]; has_more: boolean; total: number }>(
+      `/widgets/journal/entries?limit=${limit}${beforeId ? `&before_id=${beforeId}` : ''}`,
+    ),
+  update: (id: number, changes: { body?: string; mood?: string | null }) =>
+    request<JournalEntry>(`/widgets/journal/entries/${id}`, { method: 'PATCH', ...json(changes) }),
+  remove: (id: number) => request<unknown>(`/widgets/journal/entries/${id}`, { method: 'DELETE' }),
+}
