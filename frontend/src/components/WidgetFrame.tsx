@@ -91,7 +91,7 @@ export function WidgetFrame({ widget, refreshKey, editing, actions, onRemove, on
         )}
         {Body && !error && !envelope && <p className="muted small">Loading…</p>}
         {Body && !error && envelope?.status === 'ok' && (
-          <Body data={envelope.data} settings={widget.settings} actions={actions} updateSettings={updateSettings} />
+          <Body data={envelope.data} settings={widget.settings} actions={actions} updateSettings={updateSettings} reload={load} />
         )}
       </div>
     </section>

@@ -43,8 +43,9 @@ def _settings(definition: WidgetDefinition, row: Integration) -> dict:
 def _layout(definition: WidgetDefinition, row: Integration) -> dict:
     layout = dict((row.config or {}).get("layout") or {})
     w, h = definition.default_size
-    if layout.get("v", 1) < definition.layout_version:
+    if _is_outdated(definition, row):
         # Saved before the widget's default size changed: adopt the new default size
+        # (my_widgets also re-places it; this covers any read before that happens)
         layout.pop("w", None)
         layout.pop("h", None)
     return {
@@ -55,13 +56,18 @@ def _layout(definition: WidgetDefinition, row: Integration) -> dict:
     }
 
 
-def _free_spot(db: Session, user: User, w: int, h: int) -> tuple[int, int]:
+def _is_outdated(definition: WidgetDefinition, row: Integration) -> bool:
+    layout = (row.config or {}).get("layout") or {}
+    return layout.get("v", 1) < definition.layout_version
+
+
+def _free_spot(db: Session, user: User, w: int, h: int, ignore: frozenset = frozenset()) -> tuple[int, int]:
     """First position (top to bottom, left to right) where a w x h widget fits
-    without overlapping the user's other widgets."""
+    without overlapping the user's other widgets (except those in `ignore`)."""
     taken = [
         _layout(REGISTRY[r.app_name], r)
         for r in _rows(db, user)
-        if r.status == "active" and r.app_name in REGISTRY
+        if r.status == "active" and r.app_name in REGISTRY and r.app_name not in ignore
     ]
 
     def fits(x: int, y: int) -> bool:
@@ -122,13 +128,31 @@ def catalog(user: User = Depends(get_current_user), db: Session = Depends(get_db
 def my_widgets(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """The user's dashboard. Default widgets are added once, including ones
     introduced later; removing a widget keeps a disabled row, so it doesn't come back."""
-    known = {r.app_name for r in _rows(db, user)}
-    missing = [d for d in REGISTRY.values() if d.enabled_by_default and d.id not in known]
-    for definition in missing:
-        _enable(db, user, definition)
-    if missing:
-        db.commit()
     rows = _rows(db, user)
+    changed = False
+
+    # Widgets whose default size changed since their layout was saved get their new
+    # size and are re-placed (in registry order) so the grid packs neatly again
+    active = {r.app_name: r for r in rows if r.status == "active" and r.app_name in REGISTRY}
+    outdated = [d for d in REGISTRY.values() if d.id in active and _is_outdated(d, active[d.id])]
+    pending = frozenset(d.id for d in outdated)
+    for definition in outdated:
+        w, h = definition.default_size
+        x, y = _free_spot(db, user, w, h, ignore=pending)
+        _set_config(active[definition.id], layout={"x": x, "y": y, "w": w, "h": h, "v": definition.layout_version})
+        pending = pending - {definition.id}
+        db.flush()
+        changed = True
+
+    known = {r.app_name for r in rows}
+    for definition in REGISTRY.values():
+        if definition.enabled_by_default and definition.id not in known:
+            _enable(db, user, definition)
+            changed = True
+
+    if changed:
+        db.commit()
+        rows = _rows(db, user)
 
     return [
         _widget_out(REGISTRY[r.app_name], r)

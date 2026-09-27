@@ -9,6 +9,18 @@ import type { DashboardActions } from './widgets/types'
 
 type Tab = 'home' | 'today' | 'inbox'
 
+function greeting(): string {
+  const hour = new Date().getHours()
+  if (hour < 5) return 'Good night'
+  if (hour < 12) return 'Good morning'
+  if (hour < 18) return 'Good afternoon'
+  return 'Good evening'
+}
+
+function firstName(me: Me): string {
+  return (me.name || me.email).split(/[\s@]/)[0]
+}
+
 export default function App() {
   const [me, setMe] = useState<Me | null>(null)
   const [authState, setAuthState] = useState<'loading' | 'signed-out' | 'signed-in'>('loading')
@@ -89,15 +101,14 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand">
-          <img src="/favicon.svg" alt="" width={28} height={28} />
-          <span>Inbox Dashboard</span>
-        </div>
-        <nav className="tabs" aria-label="Views">
-          <button className={tab === 'home' ? 'tab active' : 'tab'} onClick={() => setTab('home')}>Home</button>
-          <button className={tab === 'today' ? 'tab active' : 'tab'} onClick={() => setTab('today')}>Today</button>
-          <button className={tab === 'inbox' ? 'tab active' : 'tab'} onClick={() => actions.goTo('inbox')}>Inbox</button>
-        </nav>
+        {tab === 'home' ? (
+          <div className="greeting">
+            <span className="greeting-hello">{greeting()}, {firstName(me)}</span>
+            <span className="greeting-date">{new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+          </div>
+        ) : (
+          <button className="button ghost back" onClick={() => setTab('home')}>← Dashboard</button>
+        )}
         <div className="topbar-actions">
           <button className="button primary" onClick={sync} disabled={syncing}>
             {syncing ? 'Syncing…' : 'Sync now'}
@@ -106,12 +117,6 @@ export default function App() {
           <button className="button ghost" onClick={logout}>Sign out</button>
         </div>
       </header>
-
-      {!me.summaries_enabled && (
-        <div className="banner">
-          Summaries are off — add <code>ANTHROPIC_API_KEY</code> on Render to turn them on. Emails still sync.
-        </div>
-      )}
 
       <main className={tab === 'home' ? 'content wide' : 'content'}>
         {tab === 'home' && <Dashboard refreshKey={refreshKey} actions={actions} onNotice={showNotice} />}

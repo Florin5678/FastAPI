@@ -135,3 +135,32 @@ export const widgetsApi = {
     request<unknown>('/widgets/layout', { method: 'PUT', ...json(items) }),
   data: <T,>(id: string) => request<WidgetEnvelope<T>>(`/widgets/${id}/data?${widgetContext()}`),
 }
+
+// ---- Nutrition widget ----
+
+export type NutrientKey = 'calories' | 'protein' | 'carbs' | 'fat' | 'fiber' | 'sugar' | 'sat_fat'
+export type NutrientValues = Record<NutrientKey, number>
+
+export type FoodResult = { fdc_id: number; name: string; data_type: string; per_100g: NutrientValues }
+
+export type FoodEntry = {
+  id: string
+  name: string
+  grams: number | null
+  source: 'manual' | 'usda'
+  nutrients: NutrientValues
+  added_at: string
+}
+
+export function localDate(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+export const nutritionApi = {
+  searchFoods: (q: string) => request<FoodResult[]>(`/widgets/nutrition/foods?q=${encodeURIComponent(q)}`),
+  addEntry: (entry: { name: string; grams?: number; nutrients: Partial<NutrientValues>; source: 'manual' | 'usda'; fdc_id?: number }) =>
+    request<FoodEntry>('/widgets/nutrition/entries', { method: 'POST', ...json({ ...entry, day: localDate() }) }),
+  deleteEntry: (id: string) =>
+    request<unknown>(`/widgets/nutrition/entries/${id}?day=${localDate()}`, { method: 'DELETE' }),
+}

@@ -204,6 +204,13 @@ code { font-size: 0.9em; background: var(--surface-2); padding: 1px 5px; border-
 }
 .toast.error { background: var(--danger); color: #fff; }
 
+/* Top bar greeting */
+.greeting { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.greeting-hello { font-weight: 650; font-size: 17px; }
+.greeting-date { color: var(--muted); font-size: 13px; }
+.button.back { padding-left: 8px; }
+.dashboard-head { justify-content: flex-end; margin-bottom: 10px; }
+
 /* Dashboard + widgets */
 .content.wide { max-width: 1200px; }
 .small { font-size: 13px; }
@@ -276,9 +283,34 @@ code { font-size: 0.9em; background: var(--surface-2); padding: 1px 5px; border-
 .mini-item .badge { margin-top: 2px; }
 .widget-footer { display: flex; gap: 16px; padding-top: 2px; }
 
-/* Weather widget */
-.weather-widget { display: flex; flex-direction: column; gap: 10px; }
+/* Weather widget: fills the widget body with a sky + city skyline */
+.weather-widget {
+  position: relative; isolation: isolate; overflow: hidden;
+  display: flex; flex-direction: column; gap: 10px;
+  margin: -14px -16px -16px; padding: 14px 16px 16px; min-height: calc(100% + 30px);
+  color: #fff; text-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  background: linear-gradient(180deg, var(--sky-top), var(--sky-bottom));
+}
+.weather-widget > :not(.skyline) { position: relative; z-index: 1; }
+.sky-clear { --sky-top: #1d5fbf; --sky-bottom: #5ea3e6; --skyline: 12 36 80; }
+.sky-cloudy { --sky-top: #4b5b72; --sky-bottom: #8a9ab0; --skyline: 30 40 55; }
+.sky-rain { --sky-top: #2f3e52; --sky-bottom: #5d6f85; --skyline: 18 26 38; }
+.sky-snow { --sky-top: #5b7290; --sky-bottom: #a9bcd2; --skyline: 40 55 75; }
+.sky-storm { --sky-top: #1f2433; --sky-bottom: #4a4a6a; --skyline: 10 10 20; }
+.sky-night { --sky-top: #0b1330; --sky-bottom: #2b2f6b; --skyline: 3 5 18; }
+.weather-widget { padding-bottom: 76px; }
+.skyline { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 96px; z-index: 0; pointer-events: none; }
+.skyline-far { fill: rgb(var(--skyline) / 0.3); }
+.skyline-near { fill: rgb(var(--skyline) / 0.55); }
+.weather-place { display: flex; flex-direction: column; }
+.weather-city { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.weather-country { font-size: 12px; opacity: 0.85; }
+.weather-feels { font-size: 13px; opacity: 0.9; }
+.weather-widget .weather-label { color: inherit; opacity: 0.9; }
 .segmented { display: inline-flex; align-self: flex-start; gap: 2px; padding: 3px; border-radius: 10px; background: var(--surface-2); }
+.weather-widget .segmented { background: rgb(255 255 255 / 0.16); text-shadow: none; }
+.weather-widget .segmented button { color: rgb(255 255 255 / 0.85); }
+.weather-widget .segmented button.active { background: rgb(255 255 255 / 0.92); color: #1b2440; }
 .segmented button {
   border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 550;
   padding: 4px 12px; border-radius: 8px; cursor: pointer;
@@ -297,12 +329,52 @@ code { font-size: 0.9em; background: var(--surface-2); padding: 1px 5px; border-
 }
 .hour {
   flex: 0 0 auto; min-width: 48px; display: flex; flex-direction: column; align-items: center; gap: 3px;
-  padding: 8px 4px; border-radius: 10px; background: var(--surface-2); font-size: 12px;
+  padding: 8px 4px; border-radius: 10px; font-size: 12px;
+  background: rgb(255 255 255 / 0.12);
 }
-.hour-time { color: var(--muted); }
+.hour-time { opacity: 0.85; }
 .hour-icon { font-size: 18px; }
 .hour-temp { font-weight: 600; font-size: 13px; }
-.hour-rain { color: var(--c-work-fg); font-size: 11px; min-height: 13px; }
+.hour-rain { color: #cfe6ff; font-size: 11px; min-height: 13px; }
+
+/* Nutrition widget */
+.nutrition-widget { display: flex; flex-direction: column; gap: 10px; }
+.nutrition-head { display: flex; align-items: center; justify-content: space-between; }
+.small-button { height: 30px; padding: 0 12px; font-size: 13px; }
+.nutrient-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.nutrient { display: grid; grid-template-columns: 5.6em 1fr auto; align-items: center; gap: 8px; font-size: 13px; }
+.nutrient-label { font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nutrient-max {
+  margin-left: 4px; font-size: 10px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.bar { height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; min-width: 40px; }
+.bar-fill { display: block; height: 100%; border-radius: inherit; transition: width 0.4s ease, background-color 0.3s; }
+.bar-fill.progress { background: #f2b705; }
+.bar-fill.done { background: #22a559; }
+.bar-fill.under-limit { background: #22a559; }
+.bar-fill.over { background: #e04141; }
+.nutrient-value { font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; font-size: 12px; text-align: right; }
+.nutrient-value.over { color: var(--danger); font-weight: 600; }
+.nutrition-widget > .link { align-self: flex-start; }
+.food-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.food-log li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; font-size: 13px; }
+.food-log li + li { border-top: 1px solid var(--border); }
+.food-name { min-width: 0; }
+
+/* Add food dialog */
+.segmented.plain { margin-bottom: 14px; }
+.segmented.plain button { color: var(--muted); }
+.segmented.plain button.active { color: var(--text); }
+.food-results { list-style: none; margin: 0; padding: 0; max-height: 280px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; }
+.food-results li + li { border-top: 1px solid var(--border); }
+.food-results button {
+  width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left;
+  border: 0; background: none; color: inherit; font: inherit; font-size: 14px; padding: 9px 12px; cursor: pointer;
+}
+.food-results button:hover { background: var(--surface-2); }
+.picked { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.manual-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
 
 /* Dialogs */
 .overlay.center { justify-content: center; align-items: center; padding: 16px; }

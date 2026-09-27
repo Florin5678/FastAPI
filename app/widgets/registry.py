@@ -63,8 +63,8 @@ class WidgetDefinition:
     min_size: tuple[int, int] = (3, 4)
     refresh_seconds: int = 300  # how often the frontend re-fetches while open
     enabled_by_default: bool = False  # added to every dashboard once (unless the user removed it)
-    # Bump when changing default_size so dashboards still using the old default
-    # get the new size; layouts the user saved after the bump are kept.
+    # Bump when changing default_size: dashboards whose saved layout predates the
+    # bump get the new size and are re-placed; layouts saved after it are kept.
     layout_version: int = 1
     config_fields: tuple[ConfigField, ...] = field(default_factory=tuple)
 

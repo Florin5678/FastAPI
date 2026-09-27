@@ -13,6 +13,8 @@ export type WidgetProps<T> = {
   // Save some of this widget's settings (e.g. a quick toggle inside the widget);
   // the widget reloads with the new settings afterwards
   updateSettings: (changes: Record<string, unknown>) => Promise<void>
+  // Re-fetch this widget's data (e.g. after the widget changed something on the server)
+  reload: () => void
 }
 
 export type WidgetUI<T = any> = {

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { WidgetProps } from './types'
+import { CitySkyline } from './CitySkyline'
 
 type Condition = { code: number; label: string; icon: string }
 
@@ -8,9 +9,19 @@ export type WeatherData = {
   country: string
   cities: string[]
   local_time: string
-  current: { temperature: number; feels_like: number; humidity: number; wind_kmh: number; weather: Condition }
+  current: { temperature: number; feels_like: number; humidity: number; wind_kmh: number; is_day: boolean; weather: Condition }
   today: { high: number; low: number; precipitation_probability: number | null; sunrise: string; sunset: string; weather: Condition }
   hours: { time: string; temperature: number; precipitation_probability: number | null; weather: Condition }[]
+}
+
+// Sky gradient for the background, from the WMO weather code
+function sky(code: number, isDay: boolean): string {
+  if (code >= 95) return 'storm'
+  if (!isDay) return 'night'
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 'snow'
+  if (code >= 51) return 'rain'
+  if (code >= 2) return 'cloudy'
+  return 'clear'
 }
 
 export function WeatherWidget({ data, updateSettings }: WidgetProps<WeatherData>) {
@@ -26,7 +37,12 @@ export function WeatherWidget({ data, updateSettings }: WidgetProps<WeatherData>
   const { current, today } = data
 
   return (
-    <div className="weather-widget">
+    <div className={`weather-widget sky-${sky(current.weather.code, current.is_day)}`}>
+      <CitySkyline city={data.city} />
+      <div className="weather-place">
+        <span className="weather-city">{data.city}</span>
+        <span className="weather-country">{data.country} · {data.local_time}</span>
+      </div>
       <div className="segmented" role="group" aria-label="City">
         {data.cities.map((city) => (
           <button
@@ -52,9 +68,7 @@ export function WeatherWidget({ data, updateSettings }: WidgetProps<WeatherData>
           <span>L {today.low}°</span>
         </div>
       </div>
-      <div className="muted small">
-        Feels like {current.feels_like}° · {data.city} {data.local_time}
-      </div>
+      <div className="weather-feels">Feels like {current.feels_like}°</div>
 
       <div className="weather-stats">
         <span title="Chance of rain today">💧 {today.precipitation_probability ?? '–'}%</span>

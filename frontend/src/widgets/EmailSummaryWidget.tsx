@@ -61,6 +61,10 @@ export function EmailSummaryWidget({ data, actions }: WidgetProps<EmailSummaryDa
         </ul>
       )}
 
+      {!data.summaries_enabled && (
+        <p className="muted small">Summaries are off (no <code>ANTHROPIC_API_KEY</code> on Render).</p>
+      )}
+
       <div className="widget-footer">
         <button className="link" onClick={() => actions.goTo('today')}>Today's digest →</button>
         <button className="link" onClick={() => actions.goTo('inbox')}>Inbox →</button>

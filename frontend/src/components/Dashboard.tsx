@@ -106,8 +106,7 @@ export function Dashboard({ refreshKey, actions, onNotice }: Props) {
 
   return (
     <section className="dashboard">
-      <div className="section-head">
-        <h2>Home</h2>
+      <div className="section-head dashboard-head">
         <div className="head-actions">
           {editing && <button className="button" onClick={() => setAdding(true)}>+ Add widget</button>}
           <button className={editing ? 'button primary' : 'button'} onClick={() => setEditing(!editing)}>

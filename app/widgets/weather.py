@@ -117,6 +117,7 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
             "feels_like": round(current["apparent_temperature"]),
             "humidity": current["relative_humidity_2m"],
             "wind_kmh": round(current["wind_speed_10m"]),
+            "is_day": bool(current["is_day"]),
             "weather": _describe(current["weather_code"], bool(current["is_day"])),
         },
         "today": {
@@ -136,8 +137,9 @@ register(WidgetDefinition(
     name="Weather",
     description="Today's weather for Aarhus or Bucharest (Open-Meteo, free).",
     fetch=fetch,
-    default_size=(4, 8),
-    min_size=(3, 6),
+    default_size=(4, 9),
+    min_size=(3, 7),
+    layout_version=3,  # v2: next to the narrower email widget; v3: taller for the skyline
     refresh_seconds=900,
     enabled_by_default=True,
     config_fields=(

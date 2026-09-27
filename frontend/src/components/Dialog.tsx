@@ -1,6 +1,8 @@
 import { useEffect, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
-// Small centered modal used by the dashboard's add-widget and settings dialogs
+// Small centered modal. Rendered into <body> so dialogs opened from inside a grid
+// widget (whose transform would trap position: fixed) still cover the page.
 export function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -8,7 +10,7 @@ export function Dialog({ title, onClose, children }: { title: string; onClose: (
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  return (
+  return createPortal(
     <div className="overlay center" onClick={onClose}>
       <div className="dialog" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="dialog-head">
@@ -17,6 +19,7 @@ export function Dialog({ title, onClose, children }: { title: string; onClose: (
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
