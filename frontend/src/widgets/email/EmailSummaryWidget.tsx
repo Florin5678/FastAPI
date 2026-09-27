@@ -20,6 +20,9 @@ export type EmailSummaryData = {
 }
 
 export function EmailSummaryWidget({ data, actions }: WidgetProps<EmailSummaryData>) {
+  // Only real categories: emails without a summary yet don't get a chip
+  const categories = data.categories.filter((c) => c.category !== 'unsummarized')
+
   return (
     <div className="email-widget">
       <button className="stat" onClick={() => actions.goTo('today')}>
@@ -27,13 +30,13 @@ export function EmailSummaryWidget({ data, actions }: WidgetProps<EmailSummaryDa
         <span className="stat-label">email{data.today_total === 1 ? '' : 's'} today</span>
       </button>
 
-      {data.categories.length > 0 && (
+      {categories.length > 0 && (
         <div className="chips compact">
-          {data.categories.map((c) => (
+          {categories.map((c) => (
             <button
               key={c.category}
               className={`chip cat-${c.category}`}
-              onClick={() => actions.goTo('inbox', { category: c.category === 'unsummarized' ? undefined : c.category })}
+              onClick={() => actions.goTo('inbox', { category: c.category })}
             >
               {categoryLabel(c.category)} <span className="count">{c.count}</span>
             </button>

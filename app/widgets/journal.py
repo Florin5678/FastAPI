@@ -1,8 +1,8 @@
 # Journal widget: write entries with an optional prompt and an optional mood emoji.
 #
 # Prompts come ONLY from content/journal_prompts.md (repo root) so they can be edited
-# freely: one per line as "N. text — *idea*" under "## Section" headings. The file is
-# re-read whenever it changes. Entry text is Fernet-encrypted at rest (app/crypto.py).
+# freely: one per line as "N. text" (N = permanent id). The file is re-read whenever
+# it changes. Entry text is Fernet-encrypted at rest (app/crypto.py).
 import random
 import re
 from datetime import date, datetime, timedelta, timezone
@@ -25,26 +25,22 @@ WIDGET_ID = "journal"
 # Edit prompts in content/journal_prompts.md (repo root)
 PROMPTS_FILE = Path(__file__).resolve().parents[2] / "content" / "journal_prompts.md"
 RECENT_PROMPTS_AVOIDED = 30  # don't suggest a prompt answered in the last N entries
-PROMPT_LINE = re.compile(r"^(\d+)\.\s+(.+?)\s+—\s+\*(.+)\*\s*$")
+# "N. text"; an older optional " — *idea*" suffix is accepted and dropped
+PROMPT_LINE = re.compile(r"^(\d+)\.\s+(.+?)(?:\s+—\s+\*.+\*)?\s*$")
 
 _prompts_cache: dict = {"mtime": None, "prompts": {}}
 
 
 def load_prompts() -> dict[int, dict]:
-    """{id: {id, text, idea, source}} from journal_prompts.md, re-read when the file changes."""
+    """{id: {id, text}} from journal_prompts.md, re-read when the file changes."""
     mtime = PROMPTS_FILE.stat().st_mtime
     if _prompts_cache["mtime"] != mtime:
-        prompts, section = {}, "Reflection"
+        prompts = {}
         for line in PROMPTS_FILE.read_text(encoding="utf-8").splitlines():
-            if line.startswith("## "):
-                heading = line[3:].strip()
-                short = re.search(r"\(([^)]+)\)\s*$", heading)  # "Cognitive ... (CBT)" -> "CBT"
-                section = short.group(1) if short else heading
-                continue
             match = PROMPT_LINE.match(line.strip())
             if match:
                 pid = int(match.group(1))
-                prompts[pid] = {"id": pid, "text": match.group(2), "idea": match.group(3), "source": section}
+                prompts[pid] = {"id": pid, "text": match.group(2)}
         _prompts_cache.update(mtime=mtime, prompts=prompts)
     return _prompts_cache["prompts"]
 

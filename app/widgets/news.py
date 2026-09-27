@@ -53,6 +53,9 @@ TOPICS: dict[str, list[tuple[str, str]]] = {
     ],
 }
 
+ALL = "All"  # every topic, merged chronologically
+TOPIC_CHOICES = [ALL, *TOPICS]
+
 _cache: dict[str, tuple[float, list, list]] = {}  # topic -> (fetched_at, items, failed sources)
 
 
@@ -101,25 +104,52 @@ def _topic_items(topic: str) -> tuple[list, list]:
             return cached[1], cached[2]  # stale beats nothing
         raise HTTPException(status_code=502, detail="Couldn't reach any news source. Try again in a minute.")
 
-    # Newest first; undated items last. Drop duplicate headlines across sources.
+    for item in items:
+        item["topic"] = topic
+    unique = _newest_unique(items)
+    _cache[topic] = (time.time(), unique, failed)
+    return unique, failed
+
+
+def _newest_unique(items: list[dict]) -> list[dict]:
+    """Newest first (undated last), dropping repeated headlines across sources/topics."""
     seen, unique = set(), []
     for item in sorted(items, key=lambda i: i["published"] or "", reverse=True):
         key = item["title"].lower()
         if key not in seen:
             seen.add(key)
             unique.append(item)
+    return unique
 
-    _cache[topic] = (time.time(), unique, failed)
-    return unique, failed
+
+def _all_items() -> tuple[list, list]:
+    """Every topic merged in one chronological list (each topic keeps its own cache)."""
+    items, failed = [], []
+    with ThreadPoolExecutor(max_workers=len(TOPICS)) as pool:
+        for topic, future in [(t, pool.submit(_topic_items, t)) for t in TOPICS]:
+            try:
+                topic_items, topic_failed = future.result()
+                items.extend(topic_items)
+                failed.extend(topic_failed)
+            except HTTPException:
+                failed.append(f"all {topic} sources")
+    if not items:
+        raise HTTPException(status_code=502, detail="Couldn't reach any news source. Try again in a minute.")
+    return _newest_unique(items), sorted(set(failed))
 
 
 def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
-    topic = settings["topic"] if settings["topic"] in TOPICS else "AI"
-    items, failed = _topic_items(topic)
+    topic = settings["topic"] if settings["topic"] in TOPIC_CHOICES else "AI"
+    if topic == ALL:
+        items, failed = _all_items()
+        sources = sorted({name for feeds in TOPICS.values() for name, _ in feeds})
+    else:
+        items, failed = _topic_items(topic)
+        sources = [name for name, _ in TOPICS[topic]]
     return {
         "topic": topic,
-        "topics": list(TOPICS),
-        "sources": [name for name, _ in TOPICS[topic]],
+        "topics": TOPIC_CHOICES,
+        "sources": sources,
         "unavailable": failed,
         "items": items[: settings["max_items"]],
     }
@@ -135,7 +165,7 @@ register(WidgetDefinition(
     refresh_seconds=900,
     enabled_by_default=True,
     config_fields=(
-        ConfigField("topic", "Topic", "select", default="AI", options=list(TOPICS)),
+        ConfigField("topic", "Topic", "select", default="AI", options=TOPIC_CHOICES),
         ConfigField("max_items", "Headlines to show", "number", default=12, min=3, max=30),
     ),
 ))

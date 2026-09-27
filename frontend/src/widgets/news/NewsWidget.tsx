@@ -8,7 +8,7 @@ export type NewsData = {
   topics: string[]
   sources: string[]
   unavailable: string[]
-  items: { title: string; link: string; source: string; published: string | null; excerpt: string }[]
+  items: { title: string; link: string; source: string; topic: string; published: string | null; excerpt: string }[]
 }
 
 export function NewsWidget({ data, updateSettings }: WidgetProps<NewsData>) {
@@ -41,7 +41,10 @@ export function NewsWidget({ data, updateSettings }: WidgetProps<NewsData>) {
         {data.items.map((item) => (
           <li key={item.link}>
             <a href={item.link} target="_blank" rel="noopener noreferrer" className="news-item">
-              <span className="news-meta">{item.source} · {timeAgo(item.published)}</span>
+              <span className="news-meta">
+                {data.topic === 'All' && <span className="news-topic">{item.topic}</span>}
+                {item.source} · {timeAgo(item.published)}
+              </span>
               <span className="news-title">{item.title}</span>
               {item.excerpt && <span className="news-excerpt">{item.excerpt}</span>}
             </a>

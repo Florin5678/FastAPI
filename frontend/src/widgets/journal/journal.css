@@ -5,8 +5,7 @@
 .journal-composer { display: flex; flex-direction: column; gap: 10px; }
 .journal-prompt { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); }
 .prompt-text { margin: 0; font-size: 13px; font-style: italic; line-height: 1.45; color: var(--text); }
-.prompt-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.prompt-source { font-size: 11px; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prompt-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .prompt-tools { display: flex; gap: 2px; flex-shrink: 0; }
 .prompt-tools .icon-button { width: 26px; height: 26px; font-size: 14px; }
 .add-prompt { align-self: flex-start; }

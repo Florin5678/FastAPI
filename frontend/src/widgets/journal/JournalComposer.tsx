@@ -70,7 +70,6 @@ export function JournalComposer({ initialPrompt, onSaved, compact }: Props) {
         <div className="journal-prompt">
           <p className="prompt-text">{prompt.text}</p>
           <div className="prompt-foot">
-            <span className="prompt-source">{prompt.source} · {prompt.idea}</span>
             <span className="prompt-tools">
               <button
                 type="button"

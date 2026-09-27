@@ -1,7 +1,7 @@
 // Journal widget: prompts, entries, locked history
 import { ApiError, json, request } from './client'
 
-export type JournalPrompt = { id: number; text: string; idea: string; source: string }
+export type JournalPrompt = { id: number; text: string }
 
 export type JournalEntry = {
   id: number
