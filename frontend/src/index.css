@@ -204,10 +204,12 @@ code { font-size: 0.9em; background: var(--surface-2); padding: 1px 5px; border-
 }
 .toast.error { background: var(--danger); color: #fff; }
 
-/* Top bar greeting */
-.greeting { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.greeting-hello { font-weight: 650; font-size: 17px; }
-.greeting-date { color: var(--muted); font-size: 13px; }
+/* Intro header (top bar on the dashboard) */
+.intro { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 4px 0; }
+.intro-hello { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+.intro-line { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; color: var(--muted); font-size: 14px; }
+.intro-line time { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 550; }
+.intro-sep { opacity: 0.5; }
 .button.back { padding-left: 8px; }
 .dashboard-head { justify-content: flex-end; margin-bottom: 10px; }
 
@@ -563,10 +565,14 @@ code { font-size: 0.9em; background: var(--surface-2); padding: 1px 5px; border-
 
 /* Phones */
 @media (max-width: 640px) {
-  .topbar { padding: 10px 16px; gap: 10px; }
+  .topbar { padding: 10px 16px; gap: 10px; position: static; } /* the intro is tall on phones: let it scroll away */
   .brand span { display: none; }
   .topbar-actions { gap: 6px; }
   .user { display: none; }
+  .intro-hello { font-size: 20px; }
+  .intro-line { font-size: 13px; }
+  .intro-sep { display: none; }
+  .intro-line > * { flex-basis: 100%; }
   .content { padding: 18px 16px 48px; }
   .banner { margin: 12px 16px 0; }
   .detail { padding: 22px 16px 32px; }

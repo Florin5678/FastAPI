@@ -5,19 +5,12 @@ import { Digest } from './components/Digest'
 import { Inbox } from './components/Inbox'
 import { EmailDetail } from './components/EmailDetail'
 import { Dashboard } from './components/Dashboard'
+import { IntroHeader } from './components/IntroHeader'
 import { NutritionPage } from './components/NutritionPage'
 import { JournalPage } from './components/JournalPage'
 import type { DashboardActions } from './widgets/types'
 
 type Tab = 'home' | 'today' | 'inbox' | 'nutrition' | 'journal'
-
-function greeting(): string {
-  const hour = new Date().getHours()
-  if (hour < 5) return 'Good night'
-  if (hour < 12) return 'Good morning'
-  if (hour < 18) return 'Good afternoon'
-  return 'Good evening'
-}
 
 function firstName(me: Me): string {
   return (me.name || me.email).split(/[\s@]/)[0]
@@ -115,10 +108,7 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         {tab === 'home' ? (
-          <div className="greeting">
-            <span className="greeting-hello">{greeting()}, {firstName(me)}</span>
-            <span className="greeting-date">{new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}</span>
-          </div>
+          <IntroHeader name={firstName(me)} />
         ) : (
           <button className="button ghost back" onClick={() => setTab('home')}>← Dashboard</button>
         )}
