@@ -41,8 +41,12 @@ def _settings(definition: WidgetDefinition, row: Integration) -> dict:
 
 
 def _layout(definition: WidgetDefinition, row: Integration) -> dict:
-    layout = (row.config or {}).get("layout") or {}
+    layout = dict((row.config or {}).get("layout") or {})
     w, h = definition.default_size
+    if layout.get("v", 1) < definition.layout_version:
+        # Saved before the widget's default size changed: adopt the new default size
+        layout.pop("w", None)
+        layout.pop("h", None)
     return {
         "x": layout.get("x", 0),
         "y": layout.get("y", 0),
@@ -51,13 +55,27 @@ def _layout(definition: WidgetDefinition, row: Integration) -> dict:
     }
 
 
-def _next_free_y(db: Session, user: User) -> int:
-    bottoms = [
-        _layout(REGISTRY[r.app_name], r)["y"] + _layout(REGISTRY[r.app_name], r)["h"]
+def _free_spot(db: Session, user: User, w: int, h: int) -> tuple[int, int]:
+    """First position (top to bottom, left to right) where a w x h widget fits
+    without overlapping the user's other widgets."""
+    taken = [
+        _layout(REGISTRY[r.app_name], r)
         for r in _rows(db, user)
         if r.status == "active" and r.app_name in REGISTRY
     ]
-    return max(bottoms, default=0)
+
+    def fits(x: int, y: int) -> bool:
+        return all(
+            x + w <= t["x"] or t["x"] + t["w"] <= x or y + h <= t["y"] or t["y"] + t["h"] <= y
+            for t in taken
+        )
+
+    bottom = max((t["y"] + t["h"] for t in taken), default=0)
+    for y in range(bottom + 1):
+        for x in range(GRID_COLS - w + 1):
+            if fits(x, y):
+                return x, y
+    return 0, bottom
 
 
 def _set_config(row: Integration, **changes: Any) -> None:
@@ -80,14 +98,16 @@ def _enable(db: Session, user: User, definition: WidgetDefinition) -> Integratio
         .filter(Integration.user_id == user.id, Integration.app_name == definition.id)
         .first()
     )
-    y = _next_free_y(db, user)
     w, h = definition.default_size
+    x, y = _free_spot(db, user, w, h)
     if row is None:
         row = Integration(user_id=user.id, app_name=definition.id, status="active", config={})
         db.add(row)
     row.status = "active"
-    # Re-enabled widgets keep their settings but go to the bottom of the grid
-    _set_config(row, settings=(row.config or {}).get("settings", {}), layout={"x": 0, "y": y, "w": w, "h": h})
+    # Re-enabled widgets keep their settings but get a fresh spot on the grid
+    layout = {"x": x, "y": y, "w": w, "h": h, "v": definition.layout_version}
+    _set_config(row, settings=(row.config or {}).get("settings", {}), layout=layout)
+    db.flush()  # so the next widget placed in this request sees this one
     return row
 
 
@@ -100,15 +120,15 @@ def catalog(user: User = Depends(get_current_user), db: Session = Depends(get_db
 
 @router.get("")
 def my_widgets(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """The user's dashboard. A brand-new user gets the default widgets once;
-    removing widgets later keeps a disabled row, so they don't come back."""
-    rows = _rows(db, user)
-    if not rows:
-        for definition in REGISTRY.values():
-            if definition.enabled_by_default:
-                _enable(db, user, definition)
+    """The user's dashboard. Default widgets are added once, including ones
+    introduced later; removing a widget keeps a disabled row, so it doesn't come back."""
+    known = {r.app_name for r in _rows(db, user)}
+    missing = [d for d in REGISTRY.values() if d.enabled_by_default and d.id not in known]
+    for definition in missing:
+        _enable(db, user, definition)
+    if missing:
         db.commit()
-        rows = _rows(db, user)
+    rows = _rows(db, user)
 
     return [
         _widget_out(REGISTRY[r.app_name], r)
@@ -192,7 +212,7 @@ def save_layout(
         w = min(max(item.w, definition.min_size[0]), GRID_COLS)
         h = max(item.h, definition.min_size[1])
         x = min(max(item.x, 0), GRID_COLS - w)
-        _set_config(row, layout={"x": x, "y": max(item.y, 0), "w": w, "h": h})
+        _set_config(row, layout={"x": x, "y": max(item.y, 0), "w": w, "h": h, "v": definition.layout_version})
     db.commit()
     return {"saved": len(items)}
 

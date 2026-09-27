@@ -54,8 +54,9 @@ register(WidgetDefinition(
     name="Email",
     description="Today's mail at a glance: counts per category and your latest emails with their summaries.",
     fetch=fetch,
-    default_size=(6, 9),
+    default_size=(5, 8),
     min_size=(3, 5),
+    layout_version=2,  # v2: default shrunk from 6x9 to 5x8 to make room for weather
     refresh_seconds=300,
     enabled_by_default=True,
     config_fields=(

@@ -62,7 +62,10 @@ class WidgetDefinition:
     default_size: tuple[int, int] = (6, 8)  # grid units (w, h) on a 12-column grid
     min_size: tuple[int, int] = (3, 4)
     refresh_seconds: int = 300  # how often the frontend re-fetches while open
-    enabled_by_default: bool = False  # added to a new user's dashboard automatically
+    enabled_by_default: bool = False  # added to every dashboard once (unless the user removed it)
+    # Bump when changing default_size so dashboards still using the old default
+    # get the new size; layouts the user saved after the bump are kept.
+    layout_version: int = 1
     config_fields: tuple[ConfigField, ...] = field(default_factory=tuple)
 
     def default_settings(self) -> dict:

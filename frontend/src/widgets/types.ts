@@ -10,6 +10,9 @@ export type WidgetProps<T> = {
   data: T
   settings: Record<string, unknown>
   actions: DashboardActions
+  // Save some of this widget's settings (e.g. a quick toggle inside the widget);
+  // the widget reloads with the new settings afterwards
+  updateSettings: (changes: Record<string, unknown>) => Promise<void>
 }
 
 export type WidgetUI<T = any> = {

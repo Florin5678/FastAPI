@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactGridLayout, { useContainerWidth, type Layout } from 'react-grid-layout'
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
@@ -79,8 +79,12 @@ export function Dashboard({ refreshKey, actions, onNotice }: Props) {
     setAdding(false)
   }
 
-  const saved = (widget: Widget) => {
+  const replaceWidget = useCallback((widget: Widget) => {
     setWidgets((ws) => (ws ?? []).map((w) => (w.id === widget.id ? widget : w)))
+  }, [])
+
+  const saved = (widget: Widget) => {
+    replaceWidget(widget)
     setSettingsFor(null)
   }
 
@@ -92,6 +96,8 @@ export function Dashboard({ refreshKey, actions, onNotice }: Props) {
       actions={actions}
       onRemove={() => remove(w)}
       onSettings={() => setSettingsFor(w)}
+      onSettingsSaved={replaceWidget}
+      onError={(message) => onNotice(message, true)}
     />
   )
 

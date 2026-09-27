@@ -10,10 +10,12 @@ type Props = {
   actions: DashboardActions
   onRemove: () => void
   onSettings: () => void
+  onSettingsSaved: (widget: Widget) => void
+  onError: (message: string) => void
 }
 
 // Shared chrome for every widget: header, loading/error states, auto-refresh.
-export function WidgetFrame({ widget, refreshKey, editing, actions, onRemove, onSettings }: Props) {
+export function WidgetFrame({ widget, refreshKey, editing, actions, onRemove, onSettings, onSettingsSaved, onError }: Props) {
   const ui = WIDGET_UI[widget.id]
   const [envelope, setEnvelope] = useState<WidgetEnvelope<unknown> | null>(null)
   const [requestError, setRequestError] = useState<string | null>(null)
@@ -40,6 +42,15 @@ export function WidgetFrame({ widget, refreshKey, editing, actions, onRemove, on
     }, widget.refresh_seconds * 1000)
     return () => clearInterval(timer)
   }, [load, widget.refresh_seconds])
+
+  const updateSettings = useCallback(async (changes: Record<string, unknown>) => {
+    try {
+      // Saving changes widget.settings, which triggers the reload effect above
+      onSettingsSaved(await widgetsApi.saveSettings(widget.id, { ...widget.settings, ...changes }))
+    } catch (err) {
+      onError(`Couldn't update ${widget.name}: ${(err as Error).message}`)
+    }
+  }, [widget.id, widget.name, widget.settings, onSettingsSaved, onError])
 
   const error = requestError ?? (envelope?.status === 'error' ? envelope.error : null)
   const Body = ui?.component
@@ -80,7 +91,7 @@ export function WidgetFrame({ widget, refreshKey, editing, actions, onRemove, on
         )}
         {Body && !error && !envelope && <p className="muted small">Loading…</p>}
         {Body && !error && envelope?.status === 'ok' && (
-          <Body data={envelope.data} settings={widget.settings} actions={actions} />
+          <Body data={envelope.data} settings={widget.settings} actions={actions} updateSettings={updateSettings} />
         )}
       </div>
     </section>
