@@ -2,6 +2,7 @@
 # sync workflow (X-API-Key header + ?email=).
 import os
 import secrets
+import time
 from typing import Optional
 from fastapi import Depends, Header, HTTPException, Query, Request
 from sqlalchemy.orm import Session
@@ -41,3 +42,23 @@ def get_current_user(
         return user
 
     raise HTTPException(status_code=401, detail="Not signed in")
+
+
+# Journal history is extra-private: reading/editing past entries requires a fresh
+# Google sign-in in this browser session (not just the session cookie, and never
+# the X-API-Key used by automation).
+JOURNAL_UNLOCK_SECONDS = 15 * 60
+
+
+def journal_unlock_expires_at(request: Request) -> Optional[float]:
+    unlocked_at = request.session.get("journal_unlocked_at")
+    if not unlocked_at:
+        return None
+    expires = unlocked_at + JOURNAL_UNLOCK_SECONDS
+    return expires if expires > time.time() else None
+
+
+def require_journal_unlock(request: Request, user: User = Depends(get_current_user)) -> User:
+    if request.session.get("user_id") != user.id or journal_unlock_expires_at(request) is None:
+        raise HTTPException(status_code=403, detail="journal_locked")
+    return user

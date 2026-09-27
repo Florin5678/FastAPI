@@ -1,5 +1,6 @@
 import os
 import secrets
+import time
 import requests
 from typing import Optional
 from urllib.parse import urlencode
@@ -26,17 +27,29 @@ SCOPE = "https://www.googleapis.com/auth/gmail.readonly email profile"
 
 
 @router.get("/login")
-def google_login(request: Request):
+def google_login(request: Request, purpose: Optional[str] = None):
     # Random state ties the callback to this browser (protects against login CSRF)
     state = secrets.token_urlsafe(24)
     request.session["oauth_state"] = state
+
+    # purpose=journal: re-confirm identity before showing journal history. Always
+    # shows Google's account screen; whether Google also asks for the password is
+    # Google's decision (it may not, if the browser's Google session is recent).
+    reconfirm = purpose == "journal" and request.session.get("user_id") is not None
+    if reconfirm:
+        request.session["oauth_purpose"] = "journal"
+    else:
+        request.session.pop("oauth_purpose", None)
+
     params = {
         "client_id": GOOGLE_CLIENT_ID,
         "redirect_uri": GOOGLE_REDIRECT_URI,
         "response_type": "code",
         "scope": SCOPE,
         "access_type": "offline",
-        "prompt": "consent",
+        # A normal login asks for consent (so Google returns a refresh token);
+        # re-confirming only needs the account screen.
+        "prompt": "select_account" if reconfirm else "consent",
         "state": state,
     }
     return RedirectResponse(f"{AUTH_URL}?{urlencode(params)}")
@@ -61,6 +74,7 @@ def google_callback(
         return RedirectResponse("/?" + urlencode({"login_error": error}))
 
     expected_state = request.session.pop("oauth_state", None)
+    purpose = request.session.pop("oauth_purpose", None)
     if not code or not state or not expected_state or not secrets.compare_digest(state, expected_state):
         raise HTTPException(status_code=400, detail="Invalid login attempt - start again from the sign-in page")
 
@@ -94,6 +108,12 @@ def google_callback(
     if not access_token or not google_id or not email:
         # Never create a half-empty user row (this is what caused the early IntegrityError)
         return RedirectResponse("/?" + urlencode({"login_error": "google_login_failed"}))
+
+    if purpose == "journal":
+        # Unlocking the journal must be done by the account that's signed in here
+        signed_in = db.get(User, request.session.get("user_id") or -1)
+        if signed_in is None or signed_in.google_id != google_id:
+            return RedirectResponse("/?" + urlencode({"login_error": "journal_wrong_account", "view": "journal"}))
 
     # --- Save/update the user ---
     user = db.query(User).filter(User.google_id == google_id).first()
@@ -139,4 +159,7 @@ def google_callback(
 
     # Signed-in from now on: the frontend is served from this same app
     request.session["user_id"] = user.id
+    if purpose == "journal":
+        request.session["journal_unlocked_at"] = time.time()
+        return RedirectResponse("/?view=journal")
     return RedirectResponse("/")

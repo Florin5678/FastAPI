@@ -1,85 +1,225 @@
 import { useCallback, useEffect, useState } from 'react'
-import { journalApi, type JournalEntry, type JournalPrompt } from '../api'
+import {
+  isJournalLocked, journalApi, localDate, shiftDay,
+  type JournalEntry, type JournalHistory, type JournalPrompt, type MoodMonth,
+} from '../api'
 import { JournalComposer, QUICK_MOODS } from '../widgets/JournalComposer'
+import { MoodMonths } from './MoodMonths'
 
-function dayHeading(day: string): string {
-  return new Date(day + 'T12:00').toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+const RANGES: { label: string; days: number }[] = [
+  { label: '30 days', days: 30 },
+  { label: '90 days', days: 90 },
+  { label: 'Year', days: 365 },
+  { label: 'All', days: 3660 },
+]
+const MONTH_RANGES = [3, 6, 12]
+
+function dayTitle(day: string): string {
+  const today = localDate()
+  if (day === today) return 'Today'
+  if (day === shiftDay(today, -1)) return 'Yesterday'
+  return new Date(day + 'T12:00').toLocaleDateString([], { weekday: 'long' })
+}
+
+function longDate(day: string): string {
+  return new Date(day + 'T12:00').toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 function timeOf(iso: string | null): string {
   return iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
 }
 
-// Full view of the Journal widget: write, and read back / edit / delete past entries
+// The journal's history is locked behind a fresh Google sign-in (server-enforced)
 export function JournalPage() {
-  const [prompt, setPrompt] = useState<JournalPrompt | null | undefined>(undefined)
-  const [entries, setEntries] = useState<JournalEntry[]>([])
-  const [hasMore, setHasMore] = useState(false)
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(true)
+  const [access, setAccess] = useState<{ unlocked: boolean; expires_at: string | null } | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const loadFirstPage = useCallback(() => {
-    setLoading(true)
-    journalApi.list()
-      .then((page) => { setEntries(page.entries); setHasMore(page.has_more); setTotal(page.total) })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
+  const check = useCallback(() => {
+    journalApi.access().then(setAccess).catch((err) => setError(err.message))
   }, [])
+  useEffect(check, [check])
 
+  // Lock the page when the unlock window ends
   useEffect(() => {
-    journalApi.prompt().then(setPrompt).catch(() => setPrompt(null))
-    loadFirstPage()
-  }, [loadFirstPage])
+    if (!access?.unlocked || !access.expires_at) return
+    const ms = new Date(access.expires_at).getTime() - Date.now()
+    const timer = setTimeout(() => setAccess({ unlocked: false, expires_at: null }), Math.max(ms, 0))
+    return () => clearTimeout(timer)
+  }, [access])
 
-  const loadMore = () => {
-    setLoading(true)
-    journalApi.list(entries[entries.length - 1]?.id)
-      .then((page) => { setEntries((prev) => [...prev, ...page.entries]); setHasMore(page.has_more) })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
+  const lock = async () => {
+    await journalApi.lock().catch(() => undefined)
+    setAccess({ unlocked: false, expires_at: null })
   }
 
-  const replace = (entry: JournalEntry) => setEntries((prev) => prev.map((e) => (e.id === entry.id ? entry : e)))
-  const drop = (id: number) => { setEntries((prev) => prev.filter((e) => e.id !== id)); setTotal((t) => t - 1) }
+  if (error) return <p className="error-text">{error}</p>
+  if (!access) return <p className="muted">Loading…</p>
+  if (!access.unlocked) return <LockScreen />
+  return <JournalHistoryView expiresAt={access.expires_at} onLock={lock} onLocked={() => setAccess({ unlocked: false, expires_at: null })} />
+}
 
-  // Group consecutive entries by day (they come newest first)
-  const groups: { day: string; items: JournalEntry[] }[] = []
-  for (const entry of entries) {
-    const last = groups[groups.length - 1]
-    if (last && last.day === entry.day) last.items.push(entry)
-    else groups.push({ day: entry.day, items: [entry] })
+function LockScreen() {
+  return (
+    <section className="journal-lock">
+      <div className="card lock-card">
+        <div className="lock-icon" aria-hidden>🔒</div>
+        <h2>Your journal is private</h2>
+        <p className="muted">
+          Confirm it's you with Google to read your past entries. It stays open for 15 minutes.
+        </p>
+        <a className="button primary large" href="/auth/google/login?purpose=journal">Confirm with Google</a>
+        <p className="muted small">You can still write new entries from the Journal widget on your dashboard.</p>
+      </div>
+    </section>
+  )
+}
+
+function JournalHistoryView({ expiresAt, onLock, onLocked }: { expiresAt: string | null; onLock: () => void; onLocked: () => void }) {
+  const today = localDate()
+  const [day, setDay] = useState(today)
+  const [dayEntries, setDayEntries] = useState<JournalEntry[] | null>(null)
+  const [prompt, setPrompt] = useState<JournalPrompt | null | undefined>(undefined)
+  const [range, setRange] = useState(90)
+  const [history, setHistory] = useState<JournalHistory | null>(null)
+  const [monthsBack, setMonthsBack] = useState(6)
+  const [months, setMonths] = useState<MoodMonth[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  // Any "locked" answer (window expired, locked elsewhere) returns to the lock screen
+  const handle = useCallback((err: unknown) => {
+    if (isJournalLocked(err)) onLocked()
+    else setError((err as Error).message)
+  }, [onLocked])
+
+  const loadDay = useCallback(() => {
+    journalApi.day(day).then((d) => setDayEntries(d.entries)).catch(handle)
+  }, [day, handle])
+  const loadHistory = useCallback(() => {
+    journalApi.history(today, range).then(setHistory).catch(handle)
+  }, [today, range, handle])
+  const loadMoods = useCallback(() => {
+    journalApi.moods(today, monthsBack).then((r) => setMonths(r.months)).catch(handle)
+  }, [today, monthsBack, handle])
+
+  useEffect(loadDay, [loadDay])
+  useEffect(loadHistory, [loadHistory])
+  useEffect(loadMoods, [loadMoods])
+  useEffect(() => { journalApi.prompt().then(setPrompt).catch(() => setPrompt(null)) }, [])
+
+  const changed = () => { loadDay(); loadHistory(); loadMoods() }
+
+  const goTo = (next: string) => {
+    if (next > today) return
+    setDayEntries(null)
+    setDay(next)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+
+  const locksAt = expiresAt ? new Date(expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
 
   return (
     <section className="journal-page">
       <div className="section-head">
         <h2>Journal</h2>
-        <span className="muted">{total} entr{total === 1 ? 'y' : 'ies'} · private and encrypted</span>
+        <span className="lock-status">
+          <span className="muted small">🔓 Open until {locksAt}</span>
+          <button className="button ghost small-button" onClick={onLock}>Lock</button>
+        </span>
       </div>
-
-      <div className="card">
-        {prompt === undefined
-          ? <p className="muted">Loading…</p>
-          : <JournalComposer initialPrompt={prompt} onSaved={() => loadFirstPage()} />}
-      </div>
-
       {error && <p className="error-text">{error}</p>}
-      {!loading && entries.length === 0 && !error && (
-        <div className="empty journal-empty">No entries yet. Your first one will appear here.</div>
+
+      <div className="day-nav">
+        <button className="button" onClick={() => goTo(shiftDay(day, -1))} aria-label="Previous day">‹</button>
+        <div className="day-nav-label">
+          <strong>{dayTitle(day)}</strong>
+          <span className="muted small">{longDate(day)}</span>
+        </div>
+        <button className="button" onClick={() => goTo(shiftDay(day, 1))} disabled={day >= today} aria-label="Next day">›</button>
+        <input type="date" className="day-picker" value={day} max={today} onChange={(e) => e.target.value && goTo(e.target.value)} aria-label="Pick a day" />
+        {day !== today && <button className="button ghost" onClick={() => goTo(today)}>Today</button>}
+      </div>
+
+      {day === today && prompt !== undefined && (
+        <div className="card composer-card">
+          <JournalComposer initialPrompt={prompt} onSaved={changed} />
+        </div>
       )}
 
-      {groups.map((group) => (
-        <div key={group.day} className="journal-day">
-          <h3>{dayHeading(group.day)}</h3>
-          {group.items.map((entry) => (
-            <EntryCard key={entry.id} entry={entry} onChanged={replace} onDeleted={drop} />
-          ))}
-        </div>
+      {dayEntries === null && <p className="muted">Loading…</p>}
+      {dayEntries?.length === 0 && (
+        <div className="empty">{day === today ? 'No entries yet today.' : 'Nothing written on this day.'}</div>
+      )}
+      {dayEntries?.map((entry) => (
+        <EntryCard
+          key={entry.id}
+          entry={entry}
+          onError={handle}
+          onChanged={(e) => { setDayEntries((prev) => prev?.map((x) => (x.id === e.id ? e : x)) ?? null); loadHistory(); loadMoods() }}
+          onDeleted={(id) => { setDayEntries((prev) => prev?.filter((x) => x.id !== id) ?? null); loadHistory(); loadMoods() }}
+        />
       ))}
 
-      {loading && <p className="muted">Loading…</p>}
-      {!loading && hasMore && <button className="button load-more" onClick={loadMore}>Older entries</button>}
+      <div className="section-head history-head">
+        <h2>Mood by month</h2>
+        <div className="segmented" role="group" aria-label="Months">
+          {MONTH_RANGES.map((n) => (
+            <button key={n} className={monthsBack === n ? 'active' : ''} onClick={() => setMonthsBack(n)}>{n} months</button>
+          ))}
+        </div>
+      </div>
+      {months && <MoodMonths months={months} today={today} onPickDay={goTo} />}
+
+      <div className="section-head history-head">
+        <h2>History</h2>
+        <div className="segmented" role="group" aria-label="Range">
+          {RANGES.map((r) => (
+            <button key={r.days} className={range === r.days ? 'active' : ''} onClick={() => setRange(r.days)}>{r.label}</button>
+          ))}
+        </div>
+      </div>
+      {history && (
+        <>
+          <p className="muted small history-summary">
+            {history.total} entr{history.total === 1 ? 'y' : 'ies'} in total
+            {history.streak > 0 && ` · 🔥 ${history.streak}-day streak`}
+            {history.first_entry_day && ` · writing since ${longDate(history.first_entry_day)}`}
+          </p>
+          {history.days.length === 0 ? (
+            <div className="empty">No entries in this period.</div>
+          ) : (
+            <div className="table-scroll">
+              <table className="history-table journal-history">
+                <thead>
+                  <tr>
+                    <th scope="col">Day</th>
+                    <th scope="col">Mood</th>
+                    <th scope="col">Entries</th>
+                    <th scope="col">Words</th>
+                    <th scope="col" className="preview-col">Beginning</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.days.map((d) => (
+                    <tr
+                      key={d.day}
+                      className={d.day === day ? 'selected' : ''}
+                      onClick={() => goTo(d.day)}
+                      tabIndex={0}
+                      onKeyDown={(e) => e.key === 'Enter' && goTo(d.day)}
+                    >
+                      <th scope="row">{new Date(d.day + 'T12:00').toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</th>
+                      <td className="moods-cell">{d.moods.join(' ') || '–'}</td>
+                      <td>{d.entries}</td>
+                      <td>{d.words}</td>
+                      <td className="preview-col">{d.preview}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
 
       <p className="muted small crisis-note">
         Journaling isn't a substitute for professional help. In a crisis: 112 · Livslinien 70 201 201 (DK) · 0800 801 200 (RO).
@@ -88,22 +228,25 @@ export function JournalPage() {
   )
 }
 
-function EntryCard({ entry, onChanged, onDeleted }: { entry: JournalEntry; onChanged: (e: JournalEntry) => void; onDeleted: (id: number) => void }) {
+function EntryCard({ entry, onChanged, onDeleted, onError }: {
+  entry: JournalEntry
+  onChanged: (e: JournalEntry) => void
+  onDeleted: (id: number) => void
+  onError: (err: unknown) => void
+}) {
   const [editing, setEditing] = useState(false)
   const [body, setBody] = useState(entry.body)
   const [mood, setMood] = useState(entry.mood ?? '')
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const save = async () => {
     setBusy(true)
-    setError(null)
     try {
       onChanged(await journalApi.update(entry.id, { body, mood: mood.trim() || null }))
       setEditing(false)
     } catch (err) {
-      setError((err as Error).message)
+      onError(err)
     } finally {
       setBusy(false)
     }
@@ -115,7 +258,7 @@ function EntryCard({ entry, onChanged, onDeleted }: { entry: JournalEntry; onCha
       await journalApi.remove(entry.id)
       onDeleted(entry.id)
     } catch (err) {
-      setError((err as Error).message)
+      onError(err)
       setBusy(false)
     }
   }
@@ -157,7 +300,6 @@ function EntryCard({ entry, onChanged, onDeleted }: { entry: JournalEntry; onCha
       ) : (
         <p className="entry-body">{entry.body}</p>
       )}
-      {error && <p className="error-text small">{error}</p>}
     </article>
   )
 }

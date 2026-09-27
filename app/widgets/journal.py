@@ -10,14 +10,15 @@ from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.crypto import decrypt, encrypt
 from app.database import get_db
 from app.models import JournalEntry, User
-from app.security import get_current_user
+from app.security import get_current_user, journal_unlock_expires_at, require_journal_unlock
 from app.widgets.registry import WidgetContext, WidgetDefinition, register, widget_row
 
 WIDGET_ID = "journal"
@@ -108,10 +109,8 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     return {
         "day": today.isoformat(),
         "prompt": pick_prompt(db, user),
-        "today": [
-            {"id": e.id, "mood": e.mood, "prompt_text": e.prompt_text, "created_at": e.created_at.isoformat() + "Z"}
-            for e in todays
-        ],
+        # Only moods here: entry text and history need the journal unlock
+        "today": [{"id": e.id, "mood": e.mood} for e in todays],
         "total": db.query(JournalEntry).filter(JournalEntry.user_id == user.id).count(),
         "streak": _streak(db, user, today),
     }
@@ -212,7 +211,7 @@ def add_entry(body: EntryIn, user: User = Depends(get_current_user), db: Session
 def list_entries(
     before_id: Optional[int] = Query(None, description="For paging: entries older than this id"),
     limit: int = Query(20, ge=1, le=100),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_journal_unlock),
     db: Session = Depends(get_db),
 ):
     """Entries newest first, paged by id."""
@@ -236,7 +235,7 @@ def _own_entry(db: Session, user: User, entry_id: int) -> JournalEntry:
 
 
 @router.patch("/entries/{entry_id}")
-def update_entry(entry_id: int, body: EntryPatch, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def update_entry(entry_id: int, body: EntryPatch, user: User = Depends(require_journal_unlock), db: Session = Depends(get_db)):
     entry = _own_entry(db, user, entry_id)
     if body.body is not None:
         entry.body = encrypt(body.body.strip())
@@ -248,8 +247,125 @@ def update_entry(entry_id: int, body: EntryPatch, user: User = Depends(get_curre
 
 
 @router.delete("/entries/{entry_id}")
-def delete_entry(entry_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_entry(entry_id: int, user: User = Depends(require_journal_unlock), db: Session = Depends(get_db)):
     entry = _own_entry(db, user, entry_id)
     db.delete(entry)
     db.commit()
     return {"deleted": entry_id}
+
+
+# ---- Journal history (locked behind a fresh Google sign-in) ----
+
+@router.get("/access")
+def access(request: Request, user: User = Depends(get_current_user)):
+    """Whether journal history is unlocked in this browser session, and until when."""
+    expires = journal_unlock_expires_at(request) if request.session.get("user_id") == user.id else None
+    return {
+        "unlocked": expires is not None,
+        "expires_at": datetime.fromtimestamp(expires, tz=timezone.utc).isoformat() if expires else None,
+    }
+
+
+@router.post("/lock")
+def lock(request: Request, user: User = Depends(get_current_user)):
+    request.session.pop("journal_unlocked_at", None)
+    return {"unlocked": False}
+
+
+@router.get("/days/{day}")
+def get_day(day: date, user: User = Depends(require_journal_unlock), db: Session = Depends(get_db)):
+    """All entries written on one day, oldest first (the order they were written)."""
+    widget_row(db, user, WIDGET_ID)
+    rows = (
+        db.query(JournalEntry)
+        .filter(JournalEntry.user_id == user.id, JournalEntry.day == day)
+        .order_by(JournalEntry.created_at, JournalEntry.id)
+        .all()
+    )
+    return {"day": day.isoformat(), "entries": [_entry_dict(e) for e in rows]}
+
+
+@router.get("/history")
+def history(
+    end: date = Query(..., description="Last day (inclusive), usually the viewer's today"),
+    days: int = Query(30, ge=1, le=3660),
+    user: User = Depends(require_journal_unlock),
+    db: Session = Depends(get_db),
+):
+    """Days with entries in the range, newest first: moods, count, words and a preview."""
+    widget_row(db, user, WIDGET_ID)
+    start = end - timedelta(days=days - 1)
+    rows = (
+        db.query(JournalEntry)
+        .filter(JournalEntry.user_id == user.id, JournalEntry.day >= start, JournalEntry.day <= end)
+        .order_by(JournalEntry.day.desc(), JournalEntry.created_at, JournalEntry.id)
+        .all()
+    )
+    by_day: dict[date, list[JournalEntry]] = {}
+    for entry in rows:
+        by_day.setdefault(entry.day, []).append(entry)
+
+    result = []
+    for day, entries in by_day.items():
+        bodies = [decrypt(e.body) for e in entries]
+        first = " ".join(bodies[0].split())
+        result.append({
+            "day": day.isoformat(),
+            "entries": len(entries),
+            "moods": [e.mood for e in entries if e.mood],
+            "words": sum(len(b.split()) for b in bodies),
+            "preview": first if len(first) <= 90 else first[:89].rsplit(" ", 1)[0] + "…",
+        })
+
+    first_day = db.query(func.min(JournalEntry.day)).filter(JournalEntry.user_id == user.id).scalar()
+    return {
+        "days": result,
+        "first_entry_day": first_day.isoformat() if first_day else None,
+        "streak": _streak(db, user, end),
+        "total": db.query(JournalEntry).filter(JournalEntry.user_id == user.id).count(),
+    }
+
+
+@router.get("/moods")
+def monthly_moods(
+    end: date = Query(..., description="The viewer's today; its month is the newest one"),
+    months: int = Query(6, ge=1, le=36),
+    user: User = Depends(require_journal_unlock),
+    db: Session = Depends(get_db),
+):
+    """Mood emoji per month, newest month first: counts per emoji and the moods of each day."""
+    widget_row(db, user, WIDGET_ID)
+    # First day of the oldest month in range
+    y, m = end.year, end.month - (months - 1)
+    while m <= 0:
+        y, m = y - 1, m + 12
+    start = date(y, m, 1)
+
+    rows = (
+        db.query(JournalEntry.day, JournalEntry.mood)
+        .filter(JournalEntry.user_id == user.id, JournalEntry.day >= start, JournalEntry.day <= end)
+        .order_by(JournalEntry.day, JournalEntry.created_at, JournalEntry.id)
+        .all()
+    )
+
+    result = []
+    y, m = end.year, end.month
+    for _ in range(months):
+        key = f"{y:04d}-{m:02d}"
+        in_month = [(d, mood) for d, mood in rows if d.year == y and d.month == m]
+        counts: dict[str, int] = {}
+        days: dict[str, list[str]] = {}
+        for d, mood in in_month:
+            days.setdefault(d.isoformat(), [])
+            if mood:
+                counts[mood] = counts.get(mood, 0) + 1
+                days[d.isoformat()].append(mood)
+        result.append({
+            "month": key,
+            "entries": len(in_month),
+            "days_logged": len(days),
+            "moods": [{"emoji": e, "count": c} for e, c in sorted(counts.items(), key=lambda kv: -kv[1])],
+            "days": days,  # "YYYY-MM-DD" -> moods that day, in writing order ([] = entries without a mood)
+        })
+        y, m = (y - 1, 12) if m == 1 else (y, m - 1)
+    return {"months": result}

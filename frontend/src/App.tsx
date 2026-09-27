@@ -47,6 +47,17 @@ export default function App() {
       })
   }, [])
 
+  // Coming back from Google: "?view=journal" after unlocking, or an unlock error
+  useEffect(() => {
+    if (authState !== 'signed-in') return
+    const params = new URLSearchParams(location.search)
+    if (params.get('view') === 'journal') setTab('journal')
+    if (params.get('login_error') === 'journal_wrong_account') {
+      setNotice({ text: 'To open your journal, confirm with the same Google account you signed in with.', error: true })
+    }
+    if (params.has('view') || params.has('login_error')) history.replaceState(null, '', '/')
+  }, [authState])
+
   useEffect(() => {
     if (!notice) return
     const timer = setTimeout(() => setNotice(null), 6000)
