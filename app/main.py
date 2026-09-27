@@ -3,6 +3,9 @@ from fastapi import FastAPI
 from app.gmail_routes import router as gmail_router
 from app.auth.google_oauth import router as google_router
 
+from app.debug_routes import router as debug_router
+app.include_router(debug_router)
+
 app = FastAPI()
 
 @app.get("/")
