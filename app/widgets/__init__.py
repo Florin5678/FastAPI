@@ -2,4 +2,4 @@
 # that calls register(WidgetDefinition(...)), import it here, and add its frontend
 # component in frontend/src/widgets/index.ts.
 from app.widgets.registry import REGISTRY, WidgetContext, WidgetDefinition  # noqa: F401
-from app.widgets import email_summary, weather, nutrition  # noqa: F401
+from app.widgets import email_summary, weather, nutrition, notes, news  # noqa: F401  (order = placement order for new widgets)

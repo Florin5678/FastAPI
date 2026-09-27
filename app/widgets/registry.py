@@ -4,9 +4,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Literal, Optional
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.models import User
+from app.models import Integration, User
 
 
 @dataclass(frozen=True)
@@ -87,6 +88,20 @@ class WidgetDefinition:
 
 
 REGISTRY: dict[str, WidgetDefinition] = {}
+
+
+def widget_row(db: Session, user: User, widget_id: str) -> Integration:
+    """The user's active integrations row for a widget. Widgets that keep their own
+    data (food log, notes, ...) store it in row.config next to settings/layout."""
+    row = (
+        db.query(Integration)
+        .filter(Integration.user_id == user.id, Integration.app_name == widget_id, Integration.status == "active")
+        .first()
+    )
+    if row is None:
+        name = REGISTRY[widget_id].name if widget_id in REGISTRY else widget_id
+        raise HTTPException(status_code=404, detail=f"The {name} widget is not on your dashboard")
+    return row
 
 
 def register(definition: WidgetDefinition) -> WidgetDefinition:

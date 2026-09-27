@@ -29,3 +29,15 @@ export function categoryLabel(category: string | null): string {
   if (!category || category === 'unsummarized') return 'Not summarized'
   return category.charAt(0).toUpperCase() + category.slice(1)
 }
+
+// "just now", "12 min ago", "3 h ago", "yesterday", "12 Sep"
+export function timeAgo(iso: string | null): string {
+  if (!iso) return ''
+  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes} min ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `${hours} h ago`
+  if (hours < 48) return 'yesterday'
+  return new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short' })
+}
