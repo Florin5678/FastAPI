@@ -64,6 +64,14 @@ def _extract_body(payload: dict) -> str:
     return ""
 
 
+def _received_at(detail: dict) -> datetime:
+    """Gmail's internalDate is when the message was received, in ms since the epoch (UTC)."""
+    internal_date = detail.get("internalDate")
+    if internal_date:
+        return datetime.utcfromtimestamp(int(internal_date) / 1000)
+    return datetime.utcnow()
+
+
 def _header(headers: list, name: str) -> str:
     for h in headers:
         if h.get("name", "").lower() == name.lower():
@@ -116,7 +124,7 @@ def sync_gmail(email: str = Query(...), max_results: int = 20, db: Session = Dep
             snippet=detail.get("snippet", ""),
             full_body=body,
             sender=sender,
-            timestamp=datetime.utcnow(),  # swap for parsed header date later if you want accuracy
+            timestamp=_received_at(detail),
         )
         db.add(email_row)
         saved += 1

@@ -1,0 +1,30 @@
+# Syncs Gmail into the database and summarizes new emails every 10 minutes.
+# Needs repo secrets (Settings -> Secrets and variables -> Actions):
+#   API_KEY     - same value as the API_KEY env var on Render
+#   USER_EMAIL  - the Gmail address to sync
+name: Sync Gmail
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      BASE_URL: https://fastapi-oocd.onrender.com
+      API_KEY: ${{ secrets.API_KEY }}
+      USER_EMAIL: ${{ secrets.USER_EMAIL }}
+    steps:
+      - name: Sync new emails
+        run: |
+          curl -sS --fail-with-body --retry 3 --retry-delay 20 --max-time 180 -X POST \
+            -H "X-API-Key: $API_KEY" \
+            "$BASE_URL/gmail/sync/gmail?email=$USER_EMAIL&max_results=20"
+      - name: Summarize new emails
+        run: |
+          curl -sS --fail-with-body --retry 2 --retry-delay 20 --max-time 300 -X POST \
+            -H "X-API-Key: $API_KEY" \
+            "$BASE_URL/summaries/run?email=$USER_EMAIL&limit=10"
