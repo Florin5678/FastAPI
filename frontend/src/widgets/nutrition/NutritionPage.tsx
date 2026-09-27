@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   localDate, nutritionApi, shiftDay,
   type NutrientRow, type NutritionDayData, type NutritionHistory,
-} from '../api'
-import { AddFoodDialog } from '../widgets/AddFoodDialog'
-import { barState, fmt, FoodLog, NutrientBars } from '../widgets/NutritionParts'
+} from '../../api'
+import { AddFoodDialog } from './AddFoodDialog'
+import { barState, fmt, FoodLog, NutrientBars } from './NutritionParts'
 
 const RANGES = [7, 14, 30, 90]
 

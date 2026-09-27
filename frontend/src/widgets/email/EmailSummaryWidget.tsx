@@ -1,6 +1,7 @@
-import { categoryLabel, formatTime, senderName } from '../format'
-import { CategoryBadge } from '../components/EmailCard'
-import type { WidgetProps } from './types'
+import { categoryLabel, formatTime, senderName } from '../../lib/format'
+import { CategoryBadge } from './EmailCard'
+import type { WidgetProps } from '../types'
+import './email.css'
 
 export type EmailSummaryData = {
   today_total: number

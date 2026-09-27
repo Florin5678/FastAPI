@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { api, type Digest as DigestData } from '../api'
-import { categoryLabel } from '../format'
+import { api, type Digest as DigestData } from '../../api'
+import { categoryLabel } from '../../lib/format'
 import { EmailCard } from './EmailCard'
 
 type Props = { refreshKey: number; onOpen: (id: number) => void }

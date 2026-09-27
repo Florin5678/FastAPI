@@ -1,5 +1,5 @@
 // Pieces shared by the Nutrition widget and the full Nutrition page
-import type { FoodEntry, NutrientRow } from '../api'
+import type { FoodEntry, NutrientRow } from '../../api'
 
 export function fmt(n: number): string {
   return n >= 100 ? String(Math.round(n)) : String(Math.round(n * 10) / 10)

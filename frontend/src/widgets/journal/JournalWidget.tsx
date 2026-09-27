@@ -1,6 +1,7 @@
-import type { JournalPrompt } from '../api'
-import type { WidgetProps } from './types'
+import type { JournalPrompt } from '../../api'
+import type { WidgetProps } from '../types'
 import { JournalComposer } from './JournalComposer'
+import './journal.css'
 
 export type JournalData = {
   day: string

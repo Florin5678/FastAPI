@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { api, type EmailItem } from '../api'
-import { CATEGORIES, categoryLabel } from '../format'
+import { api, type EmailItem } from '../../api'
+import { CATEGORIES, categoryLabel } from '../../lib/format'
 import { EmailCard } from './EmailCard'
 
 const PAGE_SIZE = 30

@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import type { WidgetProps } from './types'
+import type { WidgetProps } from '../types'
 import { CitySkyline } from './CitySkyline'
+import './weather.css'
 
 type Condition = { code: number; label: string; icon: string }
 

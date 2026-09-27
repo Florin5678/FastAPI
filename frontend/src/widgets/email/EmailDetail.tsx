@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { api, type EmailItem } from '../api'
-import { formatFullDate } from '../format'
+import { api, type EmailItem } from '../../api'
+import { formatFullDate } from '../../lib/format'
 import { CategoryBadge } from './EmailCard'
 
 type Props = { id: number; onClose: () => void }

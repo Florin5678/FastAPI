@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { localDate, nutritionApi, type NutritionDayData } from '../api'
-import type { WidgetProps } from './types'
+import { localDate, nutritionApi, type NutritionDayData } from '../../api'
+import type { WidgetProps } from '../types'
 import { AddFoodDialog } from './AddFoodDialog'
 import { FoodLog, NutrientBars } from './NutritionParts'
+import './nutrition.css'
 
 export type NutritionData = NutritionDayData
 

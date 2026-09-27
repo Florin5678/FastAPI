@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
-import { notesApi, type Note, type Reminder } from '../api'
-import type { WidgetProps } from './types'
+import { notesApi, type Note, type Reminder } from '../../api'
+import type { WidgetProps } from '../types'
+import './notes.css'
 
 export type NotesData = { reminders: Reminder[]; done: Reminder[]; notes: Note[] }
 

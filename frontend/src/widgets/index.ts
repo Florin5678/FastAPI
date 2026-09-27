@@ -1,11 +1,11 @@
 // Frontend half of the widget registry: backend widget id -> how to render it.
 // To add a widget: register it in app/widgets/ on the backend, then add its component here.
-import { EmailSummaryWidget } from './EmailSummaryWidget'
-import { WeatherWidget } from './WeatherWidget'
-import { NutritionWidget } from './NutritionWidget'
-import { NotesWidget } from './NotesWidget'
-import { NewsWidget } from './NewsWidget'
-import { JournalWidget } from './JournalWidget'
+import { EmailSummaryWidget } from './email/EmailSummaryWidget'
+import { WeatherWidget } from './weather/WeatherWidget'
+import { NutritionWidget } from './nutrition/NutritionWidget'
+import { NotesWidget } from './notes/NotesWidget'
+import { NewsWidget } from './news/NewsWidget'
+import { JournalWidget } from './journal/JournalWidget'
 import type { WidgetUI } from './types'
 
 export const WIDGET_UI: Record<string, WidgetUI> = {

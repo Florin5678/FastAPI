@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { moonPhase } from '../moon'
+import { moonPhase } from '../lib/moon'
 
 function ordinal(n: number): string {
   const rem100 = n % 100

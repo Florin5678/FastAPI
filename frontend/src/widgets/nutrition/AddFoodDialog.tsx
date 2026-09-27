@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { localDate, nutritionApi, type FoodResult, type NutrientKey, type NutrientValues } from '../api'
-import { Dialog } from '../components/Dialog'
+import { localDate, nutritionApi, type FoodResult, type NutrientKey, type NutrientValues } from '../../api'
+import { Dialog } from '../../components/Dialog'
 
 const FIELDS: { key: NutrientKey; label: string; unit: string }[] = [
   { key: 'calories', label: 'Calories', unit: 'kcal' },

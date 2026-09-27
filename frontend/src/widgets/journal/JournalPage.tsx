@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   isJournalLocked, journalApi, localDate, shiftDay,
   type JournalEntry, type JournalHistory, type JournalPrompt, type MoodMonth,
-} from '../api'
-import { JournalComposer, QUICK_MOODS } from '../widgets/JournalComposer'
+} from '../../api'
+import { JournalComposer, QUICK_MOODS } from './JournalComposer'
 import { MoodMonths } from './MoodMonths'
 
 const RANGES: { label: string; days: number }[] = [

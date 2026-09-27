@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { journalApi, localDate, type JournalEntry, type JournalPrompt } from '../api'
+import { journalApi, localDate, type JournalEntry, type JournalPrompt } from '../../api'
 
 export const QUICK_MOODS = ['😄', '🙂', '😐', '😔', '😢', '😠', '😰', '😴', '🥰', '💪']
 

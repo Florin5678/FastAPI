@@ -1,0 +1,30 @@
+/* Full-page views shared by widgets (Nutrition, Journal): day navigator, history tables */
+
+/* Nutrition page (full view) */
+.day-nav { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.day-nav .button { min-width: 36px; font-size: 18px; }
+.day-nav .button.ghost { font-size: 14px; }
+.day-nav-label { display: flex; flex-direction: column; min-width: 150px; text-align: center; }
+.day-nav-label strong { font-size: 17px; }
+.day-picker {
+  height: 36px; padding: 0 10px; border-radius: 9px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font: inherit; font-size: 14px; color-scheme: inherit;
+}
+.history-head { margin-top: 30px; flex-wrap: wrap; }
+.table-scroll { overflow-x: auto; }
+.history-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; background: var(--surface); border-radius: 12px; overflow: hidden; }
+.history-table th, .history-table td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.history-table thead th { font-size: 12px; font-weight: 650; color: var(--muted); vertical-align: bottom; }
+.history-table th:first-child { text-align: left; }
+.history-table .unit { display: block; font-size: 11px; font-weight: 400; color: var(--muted); }
+.history-table tbody tr { cursor: pointer; }
+.history-table tbody tr:hover { background: var(--surface-2); }
+.history-table tbody tr.selected { background: var(--accent-soft); }
+.history-table tr.averages { cursor: default; background: var(--surface-2); font-weight: 600; }
+.history-table tr.empty-day { color: var(--muted); }
+.history-table td.met { color: #1a8a4a; font-weight: 650; }
+.history-table td.over { color: var(--danger); font-weight: 650; }
+.history-table td.none { color: var(--border); }
+@media (prefers-color-scheme: dark) {
+  .history-table td.met { color: #5fd08e; }
+}

@@ -1,5 +1,5 @@
-import type { EmailItem } from '../api'
-import { categoryLabel, formatTime, senderName } from '../format'
+import type { EmailItem } from '../../api'
+import { categoryLabel, formatTime, senderName } from '../../lib/format'
 
 export function CategoryBadge({ category }: { category: string | null }) {
   return <span className={`badge cat-${category ?? 'unsummarized'}`}>{categoryLabel(category)}</span>

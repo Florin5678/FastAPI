@@ -1,0 +1,75 @@
+/* Email widget + Today digest, Inbox and email detail views */
+
+/* Email cards */
+.card-list { display: flex; flex-direction: column; gap: 10px; }
+.email-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: 100%;
+  text-align: left; font: inherit; color: inherit; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 14px 16px;
+}
+.email-card:hover { border-color: var(--accent); }
+.email-card-top { display: flex; justify-content: space-between; gap: 12px; width: 100%; font-size: 13px; }
+.sender { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.time { color: var(--muted); flex-shrink: 0; }
+.subject { font-weight: 550; font-size: 15px; }
+.summary { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.load-more { margin: 18px auto 0; display: flex; }
+
+/* Detail panel */
+.overlay {
+  position: fixed; inset: 0; z-index: 20; background: rgb(8 10 20 / 0.45);
+  display: flex; justify-content: flex-end;
+}
+.detail {
+  position: relative; width: 100%; max-width: 720px; height: 100%; overflow-y: auto;
+  background: var(--surface); padding: 28px 28px 40px; display: flex; flex-direction: column; gap: 14px;
+  align-items: flex-start;
+}
+.detail h2 { font-size: 21px; padding-right: 36px; }
+.detail-meta { display: flex; flex-direction: column; gap: 2px; font-size: 14px; word-break: break-word; }
+.close {
+  position: absolute; top: 14px; right: 16px; width: 34px; height: 34px; border-radius: 8px;
+  border: 0; background: var(--surface-2); color: var(--text); font-size: 22px; line-height: 1; cursor: pointer;
+}
+.summary-box { width: 100%; background: var(--accent-soft); border-radius: 10px; padding: 12px 14px; }
+.summary-box p { margin: 4px 0 0; line-height: 1.5; }
+.summary-label { font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
+.body {
+  width: 100%; white-space: pre-wrap; word-break: break-word; font-size: 14px; line-height: 1.6;
+  border-top: 1px solid var(--border); padding-top: 14px;
+}
+
+/* Email widget */
+.email-widget { display: flex; flex-direction: column; gap: 12px; }
+.stat {
+  display: flex; align-items: baseline; gap: 8px; border: 0; background: none; padding: 0;
+  color: inherit; font: inherit; cursor: pointer; text-align: left;
+}
+.stat-number { font-size: 34px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+.stat-label { color: var(--muted); font-size: 14px; }
+.chips.compact { margin: 0; }
+.chips.compact .chip { font-size: 12px; padding: 3px 10px; }
+.widget-subhead { font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.mini-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.mini-list li + li { border-top: 1px solid var(--border); }
+.mini-item {
+  width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  padding: 9px 6px; margin: 0 -6px; border: 0; border-radius: 8px; background: none;
+  color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.mini-item:hover { background: var(--surface-2); }
+.mini-top { display: flex; justify-content: space-between; gap: 10px; width: 100%; font-size: 13px; }
+.mini-subject { font-weight: 550; font-size: 14px; }
+.mini-summary {
+  color: var(--muted); font-size: 13px; line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.mini-item .badge { margin-top: 2px; }
+.widget-footer { display: flex; gap: 16px; padding-top: 2px; }
+
+/* Phones */
+@media (max-width: 640px) {
+  .detail { padding: 22px 16px 32px; }
+}

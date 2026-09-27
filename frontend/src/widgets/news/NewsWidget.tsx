@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { timeAgo } from '../format'
-import type { WidgetProps } from './types'
+import { timeAgo } from '../../lib/format'
+import type { WidgetProps } from '../types'
+import './news.css'
 
 export type NewsData = {
   topic: string

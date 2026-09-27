@@ -1,4 +1,4 @@
-import type { MoodMonth } from '../api'
+import type { MoodMonth } from '../../api'
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
