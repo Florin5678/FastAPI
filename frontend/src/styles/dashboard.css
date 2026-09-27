@@ -36,3 +36,5 @@
 }
 .catalog-icon { font-size: 22px; }
 .catalog-text { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.catalog-item.on { border-color: var(--accent); background: var(--accent-soft); }
+.catalog + .dialog-actions { margin-top: 14px; }

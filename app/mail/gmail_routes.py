@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models import User, Email
-from app.mail.gmail_client import get_valid_access_token
+from app.auth.google_tokens import get_valid_access_token
 from app.core.security import get_current_user
 
 router = APIRouter()

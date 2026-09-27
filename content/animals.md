@@ -1,0 +1,137 @@
+# Animals for the Animal Fact of the Day widget
+
+One animal per line as `- Wikipedia page title`. The widget shows one per day
+(the same one all day), with its Wikipedia photo and summary. Add or remove
+lines freely; titles must match an English Wikipedia article.
+
+## Animals
+
+- Axolotl
+- Octopus
+- Mantis shrimp
+- Tardigrade
+- Platypus
+- Pangolin
+- Narwhal
+- Red panda
+- Snow leopard
+- Blue whale
+- Hummingbird
+- Emperor penguin
+- Arctic tern
+- Wandering albatross
+- Peregrine falcon
+- Barn owl
+- Common raven
+- Kea
+- Kakapo
+- Shoebill
+- Flamingo
+- Honey bee
+- Leafcutter ant
+- Monarch butterfly
+- Dragonfly
+- Firefly
+- Orchid mantis
+- Peacock spider
+- Portuguese man o' war
+- Box jellyfish
+- Immortal jellyfish
+- Giant squid
+- Cuttlefish
+- Nautilus
+- Sea otter
+- Walrus
+- Beluga whale
+- Orca
+- Bottlenose dolphin
+- Humpback whale
+- Sperm whale
+- Manatee
+- Whale shark
+- Great white shark
+- Greenland shark
+- Hammerhead shark
+- Manta ray
+- Seahorse
+- Clownfish
+- Anglerfish
+- Pufferfish
+- Mudskipper
+- Electric eel
+- Coelacanth
+- Leatherback sea turtle
+- Galápagos tortoise
+- Komodo dragon
+- Chameleon
+- Gecko
+- Thorny devil
+- Basilisk lizard
+- Gila monster
+- King cobra
+- Reticulated python
+- Saltwater crocodile
+- Gharial
+- Poison dart frog
+- Glass frog
+- Olm
+- Hellbender
+- Echidna
+- Wombat
+- Koala
+- Kangaroo
+- Tasmanian devil
+- Sugar glider
+- Quokka
+- Aye-aye
+- Slow loris
+- Tarsier
+- Proboscis monkey
+- Bonobo
+- Orangutan
+- Gorilla
+- Chimpanzee
+- Sloth
+- Armadillo
+- Giant anteater
+- Capybara
+- Naked mole-rat
+- Beaver
+- Porcupine
+- Hedgehog
+- Star-nosed mole
+- Fennec fox
+- Arctic fox
+- Red fox
+- Gray wolf
+- African wild dog
+- Cheetah
+- Lion
+- Tiger
+- Jaguar
+- Lynx
+- Caracal
+- Spotted hyena
+- Meerkat
+- Honey badger
+- Wolverine
+- Raccoon
+- Brown bear
+- Polar bear
+- Giant panda
+- African elephant
+- Hippopotamus
+- Giraffe
+- Okapi
+- Zebra
+- Rhinoceros
+- Tapir
+- Moose
+- Reindeer
+- Bison
+- Musk ox
+- Mountain goat
+- Alpaca
+- Camel
+- Vampire bat
+- Flying fox

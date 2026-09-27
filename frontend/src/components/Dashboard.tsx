@@ -5,7 +5,7 @@ import 'react-resizable/css/styles.css'
 import { widgetsApi, type Widget } from '../api'
 import type { DashboardActions } from '../widgets/types'
 import { WidgetFrame } from './WidgetFrame'
-import { AddWidgetDialog } from './AddWidgetDialog'
+import { ManageWidgetsDialog } from './ManageWidgetsDialog'
 import { WidgetSettingsDialog } from './WidgetSettingsDialog'
 
 const COLS = 12
@@ -76,7 +76,10 @@ export function Dashboard({ refreshKey, actions, onNotice }: Props) {
 
   const added = (widget: Widget) => {
     setWidgets((ws) => [...(ws ?? []).filter((w) => w.id !== widget.id), widget])
-    setAdding(false)
+  }
+
+  const removed = (id: string) => {
+    setWidgets((ws) => (ws ?? []).filter((w) => w.id !== id))
   }
 
   const replaceWidget = useCallback((widget: Widget) => {
@@ -108,7 +111,7 @@ export function Dashboard({ refreshKey, actions, onNotice }: Props) {
     <section className="dashboard">
       <div className="section-head dashboard-head">
         <div className="head-actions">
-          {editing && <button className="button" onClick={() => setAdding(true)}>+ Add widget</button>}
+          <button className="button" onClick={() => setAdding(true)}>Add / remove widgets</button>
           <button className={editing ? 'button primary' : 'button'} onClick={() => setEditing(!editing)}>
             {editing ? 'Done' : 'Edit'}
           </button>
@@ -122,7 +125,7 @@ export function Dashboard({ refreshKey, actions, onNotice }: Props) {
       {widgets && widgets.length === 0 && (
         <div className="empty">
           Your dashboard is empty.{' '}
-          <button className="link" onClick={() => { setEditing(true); setAdding(true) }}>Add a widget</button>
+          <button className="link" onClick={() => setAdding(true)}>Add a widget</button>
         </div>
       )}
 
@@ -145,7 +148,7 @@ export function Dashboard({ refreshKey, actions, onNotice }: Props) {
         ))}
       </div>
 
-      {adding && <AddWidgetDialog onAdded={added} onClose={() => setAdding(false)} />}
+      {adding && <ManageWidgetsDialog onAdded={added} onRemoved={removed} onClose={() => setAdding(false)} />}
       {settingsFor && <WidgetSettingsDialog widget={settingsFor} onSaved={saved} onClose={() => setSettingsFor(null)} />}
     </section>
   )

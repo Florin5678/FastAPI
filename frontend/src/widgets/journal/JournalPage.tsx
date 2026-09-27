@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import {
   isJournalLocked, journalApi, localDate, shiftDay,
-  type JournalEntry, type JournalHistory, type JournalPrompt, type MoodMonth,
+  type JournalAccess, type JournalEntry, type JournalHistory, type JournalPrompt, type MoodMonth,
 } from '../../api'
 import { JournalComposer, QUICK_MOODS } from './JournalComposer'
 import { MoodMonths } from './MoodMonths'
@@ -29,9 +29,13 @@ function timeOf(iso: string | null): string {
   return iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
 }
 
-// The journal's history is locked behind a fresh Google sign-in (server-enforced)
+const GOOGLE_CONFIRM = '/auth/google/login?purpose=journal'
+const digitsOnly = (value: string) => value.replace(/\D/g, '')
+
+// The journal's history is locked (server-enforced): unlock with the PIN. Setting one up
+// the first time, or after "Forgot PIN?", takes a one-time Google confirmation.
 export function JournalPage() {
-  const [access, setAccess] = useState<{ unlocked: boolean; expires_at: string | null } | null>(null)
+  const [access, setAccess] = useState<JournalAccess | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const check = useCallback(() => {
@@ -39,42 +43,152 @@ export function JournalPage() {
   }, [])
   useEffect(check, [check])
 
-  // Lock the page when the unlock window ends
+  // Re-check (and so lock the page) when the unlock window ends
   useEffect(() => {
     if (!access?.unlocked || !access.expires_at) return
     const ms = new Date(access.expires_at).getTime() - Date.now()
-    const timer = setTimeout(() => setAccess({ unlocked: false, expires_at: null }), Math.max(ms, 0))
+    const timer = setTimeout(check, Math.max(ms, 0) + 500)
     return () => clearTimeout(timer)
-  }, [access])
+  }, [access, check])
 
   const lock = async () => {
     await journalApi.lock().catch(() => undefined)
-    setAccess({ unlocked: false, expires_at: null })
+    check()
   }
 
   if (error) return <p className="error-text">{error}</p>
   if (!access) return <p className="muted">Loading…</p>
-  if (!access.unlocked) return <LockScreen />
-  return <JournalHistoryView expiresAt={access.expires_at} onLock={lock} onLocked={() => setAccess({ unlocked: false, expires_at: null })} />
+  if (!access.unlocked) return <LockScreen access={access} onUnlocked={setAccess} />
+  return <JournalHistoryView access={access} onAccess={setAccess} onLock={lock} onLocked={check} />
 }
 
-function LockScreen() {
+function LockScreen({ access, onUnlocked }: { access: JournalAccess; onUnlocked: (a: JournalAccess) => void }) {
+  const [pin, setPin] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      onUnlocked(await journalApi.unlock(pin))
+    } catch (err) {
+      setError((err as Error).message)
+      setPin('')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  let body
+  if (!access.has_pin) {
+    body = (
+      <>
+        <h2>Set up your journal PIN</h2>
+        <p className="muted">
+          Confirm it's you with Google once, then choose a 4–8 digit PIN. After that, your PIN is all you need.
+        </p>
+        <a className="button primary large" href={GOOGLE_CONFIRM}>Confirm with Google</a>
+      </>
+    )
+  } else if (access.pin_blocked) {
+    body = (
+      <>
+        <h2>PIN blocked</h2>
+        <p className="muted">Too many wrong PINs. Confirm it's you with Google, then choose a new PIN.</p>
+        <a className="button primary large" href={GOOGLE_CONFIRM}>Confirm with Google</a>
+      </>
+    )
+  } else {
+    body = (
+      <>
+        <h2>Your journal is private</h2>
+        <p className="muted">Enter your PIN. It stays open for 15 minutes.</p>
+        <form className="pin-form" onSubmit={submit}>
+          <input
+            className="pin-input"
+            type="password"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="off"
+            maxLength={8}
+            autoFocus
+            value={pin}
+            onChange={(e) => setPin(digitsOnly(e.target.value))}
+            aria-label="PIN"
+            placeholder="••••"
+          />
+          <button type="submit" className="button primary large" disabled={busy || pin.length < 4}>
+            {busy ? 'Checking…' : 'Unlock'}
+          </button>
+        </form>
+        {error && <p className="error-text small">{error}</p>}
+        <a className="link" href={GOOGLE_CONFIRM}>Forgot your PIN? Confirm with Google</a>
+      </>
+    )
+  }
+
   return (
     <section className="journal-lock">
       <div className="card lock-card">
         <div className="lock-icon" aria-hidden>🔒</div>
-        <h2>Your journal is private</h2>
-        <p className="muted">
-          Confirm it's you with Google to read your past entries. It stays open for 15 minutes.
-        </p>
-        <a className="button primary large" href="/auth/google/login?purpose=journal">Confirm with Google</a>
+        {body}
         <p className="muted small">You can still write new entries from the Journal widget on your dashboard.</p>
       </div>
     </section>
   )
 }
 
-function JournalHistoryView({ expiresAt, onLock, onLocked }: { expiresAt: string | null; onLock: () => void; onLocked: () => void }) {
+// Choose a new PIN: first time (after Google), after "Forgot PIN?", or to change it
+function PinSetup({ title, onDone, onCancel }: { title: string; onDone: (a: JournalAccess) => void; onCancel?: () => void }) {
+  const [pin, setPin] = useState('')
+  const [repeat, setRepeat] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (pin !== repeat) {
+      setError("The two PINs don't match.")
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      onDone(await journalApi.setPin(pin))
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form className="card pin-setup" onSubmit={submit}>
+      <strong>{title}</strong>
+      <p className="muted small">4 to 8 digits. You'll use it to open your journal from now on.</p>
+      <div className="pin-setup-row">
+        <input className="pin-input" type="password" inputMode="numeric" pattern="[0-9]*" autoComplete="new-password" maxLength={8}
+          value={pin} onChange={(e) => setPin(digitsOnly(e.target.value))} aria-label="New PIN" placeholder="New PIN" autoFocus />
+        <input className="pin-input" type="password" inputMode="numeric" pattern="[0-9]*" autoComplete="new-password" maxLength={8}
+          value={repeat} onChange={(e) => setRepeat(digitsOnly(e.target.value))} aria-label="Repeat the new PIN" placeholder="Repeat" />
+        <button type="submit" className="button primary" disabled={busy || pin.length < 4 || repeat.length < 4}>Save PIN</button>
+        {onCancel && <button type="button" className="button ghost" onClick={onCancel}>Cancel</button>}
+      </div>
+      {error && <p className="error-text small">{error}</p>}
+    </form>
+  )
+}
+
+function JournalHistoryView({ access, onAccess, onLock, onLocked }: {
+  access: JournalAccess
+  onAccess: (a: JournalAccess) => void
+  onLock: () => void
+  onLocked: () => void
+}) {
+  const expiresAt = access.expires_at
+  const [changingPin, setChangingPin] = useState(false)
   const today = localDate()
   const [day, setDay] = useState(today)
   const [dayEntries, setDayEntries] = useState<JournalEntry[] | null>(null)
@@ -123,10 +237,24 @@ function JournalHistoryView({ expiresAt, onLock, onLocked }: { expiresAt: string
         <h2>Journal</h2>
         <span className="lock-status">
           <span className="muted small">🔓 Open until {locksAt}</span>
+          {access.has_pin && !access.pin_blocked && !changingPin && (
+            <button className="button ghost small-button" onClick={() => setChangingPin(true)}>Change PIN</button>
+          )}
           <button className="button ghost small-button" onClick={onLock}>Lock</button>
         </span>
       </div>
       {error && <p className="error-text">{error}</p>}
+
+      {(!access.has_pin || access.pin_blocked) && (
+        <PinSetup title={access.pin_blocked ? 'Choose a new PIN' : 'Choose a PIN for your journal'} onDone={onAccess} />
+      )}
+      {changingPin && (
+        <PinSetup
+          title="Change your PIN"
+          onDone={(a) => { onAccess(a); setChangingPin(false) }}
+          onCancel={() => setChangingPin(false)}
+        />
+      )}
 
       <div className="day-nav">
         <button className="button" onClick={() => goTo(shiftDay(day, -1))} aria-label="Previous day">‹</button>

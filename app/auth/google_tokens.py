@@ -1,3 +1,4 @@
+"""Google access tokens for API calls (Gmail, Calendar): decrypt, refresh when expired."""
 import os
 import requests
 from datetime import datetime, timedelta

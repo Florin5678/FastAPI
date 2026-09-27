@@ -9,3 +9,4 @@ alembic
 anthropic
 itsdangerous
 feedparser
+tzdata

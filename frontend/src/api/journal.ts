@@ -26,11 +26,21 @@ export const journalApi = {
     request<JournalEntry>(`/widgets/journal/entries/${id}`, { method: 'PATCH', ...json(changes) }),
   remove: (id: number) => request<unknown>(`/widgets/journal/entries/${id}`, { method: 'DELETE' }),
   // History (locked: needs a fresh Google sign-in, see /auth/google/login?purpose=journal)
-  access: () => request<{ unlocked: boolean; expires_at: string | null }>('/widgets/journal/access'),
+  access: () => request<JournalAccess>('/widgets/journal/access'),
+  unlock: (pin: string) => request<JournalAccess>('/widgets/journal/unlock', { method: 'POST', ...json({ pin }) }),
+  setPin: (pin: string) => request<JournalAccess>('/widgets/journal/pin', { method: 'POST', ...json({ pin }) }),
   lock: () => request<unknown>('/widgets/journal/lock', { method: 'POST' }),
   day: (day: string) => request<{ day: string; entries: JournalEntry[] }>(`/widgets/journal/days/${day}`),
   history: (end: string, days: number) => request<JournalHistory>(`/widgets/journal/history?end=${end}&days=${days}`),
   moods: (end: string, months: number) => request<{ months: MoodMonth[] }>(`/widgets/journal/moods?end=${end}&months=${months}`),
+}
+
+export type JournalAccess = {
+  unlocked: boolean
+  expires_at: string | null
+  has_pin: boolean
+  pin_blocked: boolean // too many wrong PINs: reset via Google
+  retry_after_seconds: number
 }
 
 export type JournalHistory = {

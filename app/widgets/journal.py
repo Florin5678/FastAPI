@@ -3,8 +3,11 @@
 # Prompts come ONLY from content/journal_prompts.md (repo root) so they can be edited
 # freely: one per line as "N. text" (N = permanent id). The file is re-read whenever
 # it changes. Entry text is Fernet-encrypted at rest (app/crypto.py).
+import hashlib
 import random
 import re
+import secrets
+import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
@@ -251,16 +254,105 @@ def delete_entry(entry_id: int, user: User = Depends(require_journal_unlock), db
     return {"deleted": entry_id}
 
 
-# ---- Journal history (locked behind a fresh Google sign-in) ----
+# ---- Journal lock: PIN (set up and recovered with a one-time Google confirmation) ----
+#
+# History is locked per browser session (15 min, app/core/security.py). Unlock with the
+# PIN; the very first time (no PIN yet) and after "Forgot PIN?" the user confirms with
+# Google instead (/auth/google/login?purpose=journal), then chooses a PIN.
+# The PIN is stored only as a salted scrypt hash in the journal widget's row
+# (config["pin"]). Brute-force guard: 5 wrong tries -> 5 min pause; 10 -> PIN blocked
+# until reset via Google + a new PIN.
+PIN_PATTERN = re.compile(r"^\d{4,8}$")
+PAUSE_AFTER = 5
+PAUSE_SECONDS = 5 * 60
+BLOCK_AFTER = 10
+
+
+def _pin_state(row) -> Optional[dict]:
+    return (row.config or {}).get("pin")
+
+
+def _save_pin_state(row, state: Optional[dict]) -> None:
+    config = dict(row.config or {})
+    if state is None:
+        config.pop("pin", None)
+    else:
+        config["pin"] = state
+    row.config = config  # JSON column: assign a new dict so it's saved
+    row.updated_at = datetime.utcnow()
+
+
+def _hash_pin(pin: str, salt: bytes) -> str:
+    return hashlib.scrypt(pin.encode(), salt=salt, n=2**14, r=8, p=1, dklen=32).hex()
+
+
+def _unlocked(request: Request, user: User) -> Optional[float]:
+    return journal_unlock_expires_at(request) if request.session.get("user_id") == user.id else None
+
 
 @router.get("/access")
-def access(request: Request, user: User = Depends(get_current_user)):
-    """Whether journal history is unlocked in this browser session, and until when."""
-    expires = journal_unlock_expires_at(request) if request.session.get("user_id") == user.id else None
+def access(request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Lock status for this browser session, and what the lock screen should offer."""
+    state = _pin_state(widget_row(db, user, WIDGET_ID)) or {}
+    expires = _unlocked(request, user)
+    retry = max(0, int((state.get("paused_until") or 0) - time.time()))
     return {
         "unlocked": expires is not None,
         "expires_at": datetime.fromtimestamp(expires, tz=timezone.utc).isoformat() if expires else None,
+        "has_pin": bool(state.get("hash")),
+        "pin_blocked": state.get("failed", 0) >= BLOCK_AFTER,
+        "retry_after_seconds": retry,
     }
+
+
+class PinIn(BaseModel):
+    pin: str
+
+
+@router.post("/unlock")
+def unlock(body: PinIn, request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = widget_row(db, user, WIDGET_ID)
+    state = dict(_pin_state(row) or {})
+    if not state.get("hash"):
+        raise HTTPException(status_code=409, detail="No PIN set yet. Confirm with Google once to set one.")
+    if state.get("failed", 0) >= BLOCK_AFTER:
+        raise HTTPException(status_code=423, detail="Too many wrong PINs. Use \"Forgot PIN?\" to confirm with Google and set a new one.")
+    wait = int((state.get("paused_until") or 0) - time.time())
+    if wait > 0:
+        raise HTTPException(status_code=429, detail=f"Too many wrong PINs. Try again in {max(1, round(wait / 60))} min.")
+
+    expected = state["hash"]
+    given = _hash_pin(body.pin, bytes.fromhex(state["salt"])) if PIN_PATTERN.match(body.pin or "") else ""
+    if not given or not secrets.compare_digest(given, expected):
+        state["failed"] = state.get("failed", 0) + 1
+        if state["failed"] % PAUSE_AFTER == 0 and state["failed"] < BLOCK_AFTER:
+            state["paused_until"] = time.time() + PAUSE_SECONDS
+        _save_pin_state(row, state)
+        db.commit()
+        left = BLOCK_AFTER - state["failed"]
+        if left <= 0:
+            raise HTTPException(status_code=423, detail="Too many wrong PINs. Use \"Forgot PIN?\" to confirm with Google and set a new one.")
+        if (state.get("paused_until") or 0) > time.time():
+            raise HTTPException(status_code=429, detail="Wrong PIN. Too many tries: wait 5 minutes.")
+        raise HTTPException(status_code=403, detail=f"Wrong PIN ({left} tr{'y' if left == 1 else 'ies'} left before it's blocked).")
+
+    state.update(failed=0, paused_until=None)
+    _save_pin_state(row, state)
+    db.commit()
+    request.session["journal_unlocked_at"] = time.time()
+    return access(request, user, db)
+
+
+@router.post("/pin")
+def set_pin(body: PinIn, request: Request, user: User = Depends(require_journal_unlock), db: Session = Depends(get_db)):
+    """Set or change the PIN. Only while unlocked (first time: after confirming with Google)."""
+    if not PIN_PATTERN.match(body.pin or ""):
+        raise HTTPException(status_code=422, detail="The PIN must be 4 to 8 digits.")
+    row = widget_row(db, user, WIDGET_ID)
+    salt = secrets.token_bytes(16)
+    _save_pin_state(row, {"salt": salt.hex(), "hash": _hash_pin(body.pin, salt), "failed": 0, "paused_until": None})
+    db.commit()
+    return access(request, user, db)
 
 
 @router.post("/lock")

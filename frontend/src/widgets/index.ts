@@ -6,6 +6,8 @@ import { NutritionWidget } from './nutrition/NutritionWidget'
 import { NotesWidget } from './notes/NotesWidget'
 import { NewsWidget } from './news/NewsWidget'
 import { JournalWidget } from './journal/JournalWidget'
+import { CalendarWidget } from './calendar/CalendarWidget'
+import { AnimalWidget } from './animal/AnimalWidget'
 import type { WidgetUI } from './types'
 
 export const WIDGET_UI: Record<string, WidgetUI> = {
@@ -15,4 +17,6 @@ export const WIDGET_UI: Record<string, WidgetUI> = {
   notes: { icon: '📝', component: NotesWidget },
   news: { icon: '📰', component: NewsWidget },
   journal: { icon: '📓', component: JournalWidget },
+  calendar: { icon: '📅', component: CalendarWidget },
+  animal: { icon: '🐾', component: AnimalWidget },
 }
