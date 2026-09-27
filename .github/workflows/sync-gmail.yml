@@ -18,6 +18,12 @@ jobs:
       API_KEY: ${{ secrets.API_KEY }}
       USER_EMAIL: ${{ secrets.USER_EMAIL }}
     steps:
+      - name: Check secrets are set
+        run: |
+          missing=0
+          [ -z "$API_KEY" ] && echo "::error::Repository secret API_KEY is missing (Settings -> Secrets and variables -> Actions -> Secrets tab)" && missing=1
+          [ -z "$USER_EMAIL" ] && echo "::error::Repository secret USER_EMAIL is missing (Settings -> Secrets and variables -> Actions -> Secrets tab)" && missing=1
+          exit $missing
       - name: Sync new emails
         run: |
           curl -sS --fail-with-body --retry 3 --retry-delay 20 --max-time 180 -X POST \
