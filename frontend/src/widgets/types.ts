@@ -3,7 +3,7 @@ import type { ComponentType } from 'react'
 // Things any widget can ask the dashboard to do
 export type DashboardActions = {
   openEmail: (id: number) => void
-  goTo: (view: 'today' | 'inbox', options?: { category?: string }) => void
+  goTo: (view: 'today' | 'inbox' | 'nutrition', options?: { category?: string }) => void
 }
 
 export type WidgetProps<T> = {

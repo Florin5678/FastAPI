@@ -144,25 +144,54 @@ export type NutrientValues = Record<NutrientKey, number>
 export type FoodResult = { fdc_id: number; name: string; data_type: string; per_100g: NutrientValues }
 
 export type FoodEntry = {
-  id: string
+  id: number
+  day: string
   name: string
   grams: number | null
   source: 'manual' | 'usda'
   nutrients: NutrientValues
-  added_at: string
+  added_at: string | null
 }
 
-export function localDate(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+export type NutrientRow = {
+  key: NutrientKey
+  label: string
+  unit: string
+  kind: 'goal' | 'limit'
+  goal: number
+  actual: number
+}
+
+export type NutritionDayData = {
+  day: string
+  nutrients: NutrientRow[]
+  entries: FoodEntry[]
+  personal_food_key: boolean
+}
+
+export type NutritionHistory = {
+  days: { day: string; entries: number; nutrients: NutrientRow[] }[]
+  first_logged_day: string | null
+}
+
+// YYYY-MM-DD in the browser's timezone (optionally shifted by whole days)
+export function localDate(d: Date = new Date(), shiftDays = 0): string {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() + shiftDays)
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`
+}
+
+export function shiftDay(day: string, days: number): string {
+  const [y, m, d] = day.split('-').map(Number)
+  return localDate(new Date(y, m - 1, d), days)
 }
 
 export const nutritionApi = {
   searchFoods: (q: string) => request<FoodResult[]>(`/widgets/nutrition/foods?q=${encodeURIComponent(q)}`),
-  addEntry: (entry: { name: string; grams?: number; nutrients: Partial<NutrientValues>; source: 'manual' | 'usda'; fdc_id?: number }) =>
-    request<FoodEntry>('/widgets/nutrition/entries', { method: 'POST', ...json({ ...entry, day: localDate() }) }),
-  deleteEntry: (id: string) =>
-    request<unknown>(`/widgets/nutrition/entries/${id}?day=${localDate()}`, { method: 'DELETE' }),
+  addEntry: (day: string, entry: { name: string; grams?: number; nutrients: Partial<NutrientValues>; source: 'manual' | 'usda'; fdc_id?: number }) =>
+    request<FoodEntry>('/widgets/nutrition/entries', { method: 'POST', ...json({ ...entry, day }) }),
+  deleteEntry: (id: number) => request<unknown>(`/widgets/nutrition/entries/${id}`, { method: 'DELETE' }),
+  getDay: (day: string) => request<NutritionDayData>(`/widgets/nutrition/days/${day}`),
+  history: (end: string, days: number) => request<NutritionHistory>(`/widgets/nutrition/history?end=${end}&days=${days}`),
 }
 
 // ---- Notes & reminders widget ----

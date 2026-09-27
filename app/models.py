@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, ForeignKey, JSON
+    Column, Integer, String, Text, DateTime, Date, Float, ForeignKey, JSON, UniqueConstraint, Index
 )
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -79,3 +79,40 @@ class Email(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="emails")
+
+class NutritionEntry(Base):
+    """One food logged by the user on a given (local) day."""
+    __tablename__ = "nutrition_entries"
+    __table_args__ = (Index("ix_nutrition_entries_user_day", "user_id", "day"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    day = Column(Date, nullable=False, index=True)  # the user's local date
+
+    name = Column(String(200), nullable=False)
+    grams = Column(Float, nullable=True)
+    source = Column(String(10), nullable=False, default="manual")  # "manual" | "usda"
+    fdc_id = Column(Integer, nullable=True)  # USDA FoodData Central id
+
+    calories = Column(Float, nullable=False, default=0)
+    protein = Column(Float, nullable=False, default=0)
+    carbs = Column(Float, nullable=False, default=0)
+    fat = Column(Float, nullable=False, default=0)
+    fiber = Column(Float, nullable=False, default=0)
+    sugar = Column(Float, nullable=False, default=0)
+    sat_fat = Column(Float, nullable=False, default=0)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class NutritionDay(Base):
+    """The goals that applied on a day (snapshotted when food is logged), so past
+    days keep being judged against the goals of that time."""
+    __tablename__ = "nutrition_days"
+    __table_args__ = (UniqueConstraint("user_id", "day", name="uq_nutrition_days_user_day"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    day = Column(Date, nullable=False)
+    goals = Column(JSON, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

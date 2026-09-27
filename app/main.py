@@ -1,6 +1,8 @@
 import hashlib
 import hmac
+import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -14,7 +16,31 @@ from app.widgets.nutrition import router as nutrition_router
 from app.widgets.notes import router as notes_router
 from app.auth.google_oauth import router as google_router
 
-app = FastAPI()
+ROOT = Path(__file__).resolve().parent.parent
+logger = logging.getLogger(__name__)
+
+
+def run_migrations() -> None:
+    """Bring the database schema up to date (alembic upgrade head). Runs on every
+    startup, so a deploy that adds a migration applies it by itself; if it fails,
+    the app doesn't start and Render keeps serving the previous deploy."""
+    from alembic import command
+    from alembic.config import Config
+
+    config = Config(str(ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(ROOT / "alembic"))
+    command.upgrade(config, "head")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if os.getenv("SKIP_MIGRATIONS") != "1":  # set in tests / local setups that manage the schema themselves
+        run_migrations()
+        logger.info("Database migrations are up to date")
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 # Signed session cookie for the browser frontend. The signing secret is derived from
 # ENCRYPTION_KEY so there's no extra env var to manage (SESSION_SECRET overrides it).
@@ -49,6 +75,6 @@ app.include_router(nutrition_router)  # food log + USDA food search for the Nutr
 app.include_router(notes_router)  # notes + reminders CRUD for the Notes widget
 
 # The React frontend (built into frontend/dist) is served from everything else
-FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+FRONTEND_DIST = ROOT / "frontend" / "dist"
 if FRONTEND_DIST.is_dir():
     app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")

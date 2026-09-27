@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { nutritionApi, type FoodResult, type NutrientKey, type NutrientValues } from '../api'
+import { localDate, nutritionApi, type FoodResult, type NutrientKey, type NutrientValues } from '../api'
 import { Dialog } from '../components/Dialog'
 
 const FIELDS: { key: NutrientKey; label: string; unit: string }[] = [
@@ -18,9 +18,9 @@ function scale(per100: NutrientValues, grams: number): NutrientValues {
   ) as NutrientValues
 }
 
-type Props = { personalKey: boolean; onAdded: () => void; onClose: () => void }
+type Props = { day: string; personalKey: boolean; onAdded: () => void; onClose: () => void }
 
-export function AddFoodDialog({ personalKey, onAdded, onClose }: Props) {
+export function AddFoodDialog({ day, personalKey, onAdded, onClose }: Props) {
   const [mode, setMode] = useState<'search' | 'manual'>('search')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -63,10 +63,10 @@ export function AddFoodDialog({ personalKey, onAdded, onClose }: Props) {
     try {
       if (mode === 'search') {
         if (!picked || !preview) return
-        await nutritionApi.addEntry({ name: picked.name, grams: gramsNumber, nutrients: preview, source: 'usda', fdc_id: picked.fdc_id })
+        await nutritionApi.addEntry(day, { name: picked.name, grams: gramsNumber, nutrients: preview, source: 'usda', fdc_id: picked.fdc_id })
       } else {
         const nutrients = Object.fromEntries(FIELDS.map(({ key }) => [key, Number(values[key] || 0)]))
-        await nutritionApi.addEntry({ name: name.trim() || 'Food', nutrients, source: 'manual' })
+        await nutritionApi.addEntry(day, { name: name.trim() || 'Food', nutrients, source: 'manual' })
       }
       onAdded()
     } catch (err) {
@@ -77,7 +77,10 @@ export function AddFoodDialog({ personalKey, onAdded, onClose }: Props) {
   }
 
   return (
-    <Dialog title="Add food" onClose={onClose}>
+    <Dialog
+      title={day === localDate() ? 'Add food' : `Add food · ${new Date(day + 'T12:00').toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}`}
+      onClose={onClose}
+    >
       <div className="segmented plain" role="tablist">
         <button type="button" className={mode === 'search' ? 'active' : ''} onClick={() => setMode('search')}>Search foods</button>
         <button type="button" className={mode === 'manual' ? 'active' : ''} onClick={() => setMode('manual')}>Enter manually</button>
