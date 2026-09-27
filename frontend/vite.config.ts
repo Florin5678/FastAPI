@@ -15,6 +15,7 @@ export default defineConfig({
       '/emails': api,
       '/summaries': api,
       '/digest': api,
+      '/widgets': api,
     },
   },
 })

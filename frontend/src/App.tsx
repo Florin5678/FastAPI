@@ -1,18 +1,21 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, ApiError, type Me } from './api'
 import { SignIn } from './components/SignIn'
 import { Digest } from './components/Digest'
 import { Inbox } from './components/Inbox'
 import { EmailDetail } from './components/EmailDetail'
+import { Dashboard } from './components/Dashboard'
+import type { DashboardActions } from './widgets/types'
 
-type Tab = 'today' | 'inbox'
+type Tab = 'home' | 'today' | 'inbox'
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null)
   const [authState, setAuthState] = useState<'loading' | 'signed-out' | 'signed-in'>('loading')
   const [loadError, setLoadError] = useState<string | null>(null)
 
-  const [tab, setTab] = useState<Tab>('today')
+  const [tab, setTab] = useState<Tab>('home')
+  const [inboxCategory, setInboxCategory] = useState<string | undefined>(undefined)
   const [openEmailId, setOpenEmailId] = useState<number | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [syncing, setSyncing] = useState(false)
@@ -55,6 +58,17 @@ export default function App() {
     }
   }, [me])
 
+  const showNotice = useCallback((text: string, error?: boolean) => setNotice({ text, error }), [])
+
+  const actions: DashboardActions = useMemo(() => ({
+    openEmail: setOpenEmailId,
+    goTo: (view, options) => {
+      if (view === 'inbox') setInboxCategory(options?.category)
+      setTab(view)
+      window.scrollTo(0, 0)
+    },
+  }), [])
+
   const logout = async () => {
     await api.logout().catch(() => undefined)
     setMe(null)
@@ -80,8 +94,9 @@ export default function App() {
           <span>Inbox Dashboard</span>
         </div>
         <nav className="tabs" aria-label="Views">
+          <button className={tab === 'home' ? 'tab active' : 'tab'} onClick={() => setTab('home')}>Home</button>
           <button className={tab === 'today' ? 'tab active' : 'tab'} onClick={() => setTab('today')}>Today</button>
-          <button className={tab === 'inbox' ? 'tab active' : 'tab'} onClick={() => setTab('inbox')}>Inbox</button>
+          <button className={tab === 'inbox' ? 'tab active' : 'tab'} onClick={() => actions.goTo('inbox')}>Inbox</button>
         </nav>
         <div className="topbar-actions">
           <button className="button primary" onClick={sync} disabled={syncing}>
@@ -98,10 +113,12 @@ export default function App() {
         </div>
       )}
 
-      <main className="content">
-        {tab === 'today'
-          ? <Digest refreshKey={refreshKey} onOpen={setOpenEmailId} />
-          : <Inbox refreshKey={refreshKey} onOpen={setOpenEmailId} />}
+      <main className={tab === 'home' ? 'content wide' : 'content'}>
+        {tab === 'home' && <Dashboard refreshKey={refreshKey} actions={actions} onNotice={showNotice} />}
+        {tab === 'today' && <Digest refreshKey={refreshKey} onOpen={setOpenEmailId} />}
+        {tab === 'inbox' && (
+          <Inbox key={inboxCategory ?? 'all'} initialCategory={inboxCategory} refreshKey={refreshKey} onOpen={setOpenEmailId} />
+        )}
       </main>
 
       {openEmailId !== null && <EmailDetail id={openEmailId} onClose={() => setOpenEmailId(null)} />}

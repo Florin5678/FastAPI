@@ -5,10 +5,10 @@ import { EmailCard } from './EmailCard'
 
 const PAGE_SIZE = 30
 
-type Props = { refreshKey: number; onOpen: (id: number) => void }
+type Props = { refreshKey: number; onOpen: (id: number) => void; initialCategory?: string }
 
-export function Inbox({ refreshKey, onOpen }: Props) {
-  const [category, setCategory] = useState<string | undefined>(undefined)
+export function Inbox({ refreshKey, onOpen, initialCategory }: Props) {
+  const [category, setCategory] = useState<string | undefined>(initialCategory)
   const [emails, setEmails] = useState<EmailItem[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
