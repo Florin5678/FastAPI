@@ -1,7 +1,11 @@
 # Animal Fact of the Day: one animal per (local) day from content/animals.md, with its
 # photo and summary from Wikipedia's free page-summary API (no key; text CC BY-SA).
-# Wikipedia asks API clients to send a descriptive User-Agent. Summaries are cached
-# per animal for a day, so this makes about one request a day.
+# Wikipedia asks API clients to send a descriptive User-Agent *with contact info*
+# (https://meta.wikimedia.org/wiki/User-Agent_policy); requests from cloud servers
+# without it can be refused. Summaries are cached per animal for a day. If the server
+# still can't reach Wikipedia, fetch() returns just the animal and the browser loads
+# the summary itself (the REST API allows cross-origin requests).
+import logging
 import random
 import re
 import time
@@ -21,7 +25,8 @@ from app.widgets.registry import WidgetContext, WidgetDefinition, register
 # Edit the list in content/animals.md (repo root)
 ANIMALS_FILE = Path(__file__).resolve().parents[2] / "content" / "animals.md"
 SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
-USER_AGENT = "PersonalDashboard/1.0 (personal, non-commercial dashboard)"
+USER_AGENT = "PersonalDashboard/1.0 (https://github.com/Florin5678/FastAPI; personal non-commercial dashboard) python-requests"
+logger = logging.getLogger(__name__)
 CACHE_SECONDS = 24 * 3600
 
 _animals_cache: dict = {"mtime": None, "animals": []}
@@ -47,24 +52,32 @@ def _local_date(tz: Optional[str]):
         return datetime.now(timezone.utc).date()
 
 
-def _summary(name: str) -> dict:
+def _summary_url(name: str) -> str:
+    return SUMMARY_URL.format(title=quote(name.replace(" ", "_"), safe=""))
+
+
+def _summary(name: str) -> Optional[dict]:
+    """Wikipedia's summary for the animal, or None if the server can't get it."""
     cached = _summary_cache.get(name)
     if cached and time.time() - cached[0] < CACHE_SECONDS:
         return cached[1]
-    try:
-        response = requests.get(
-            SUMMARY_URL.format(title=quote(name.replace(" ", "_"), safe="")),
-            headers={"User-Agent": USER_AGENT},
-            timeout=15,
-        )
-        response.raise_for_status()
-    except requests.RequestException:
-        if cached:
-            return cached[1]
-        raise HTTPException(status_code=502, detail="Wikipedia didn't respond. Try again in a minute.")
-    data = response.json()
-    _summary_cache[name] = (time.time(), data)
-    return data
+    for attempt in range(2):
+        try:
+            response = requests.get(
+                _summary_url(name),
+                headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+                timeout=10,
+            )
+            if response.ok:
+                data = response.json()
+                _summary_cache[name] = (time.time(), data)
+                return data
+            logger.warning("Wikipedia summary for %r: HTTP %s %s", name, response.status_code, response.text[:200])
+        except requests.RequestException as e:
+            logger.warning("Wikipedia summary for %r failed: %s", name, e)
+        if attempt == 0:
+            time.sleep(0.5)
+    return cached[1] if cached else None
 
 
 # Wikimedia only serves standard thumbnail widths (e.g. 330, 500, 960; 640 -> 400 error)
@@ -89,7 +102,12 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     today = _local_date(ctx.tz)
     name = animals[today.toordinal() % len(animals)]
     summary = _summary(name)
+    if summary is None:
+        # The browser will load the summary straight from Wikipedia instead
+        return {"day": today.isoformat(), "name": name, "summary_url": _summary_url(name), "loaded": False}
     return {
+        "loaded": True,
+        "summary_url": _summary_url(name),
         "day": today.isoformat(),
         "name": name,
         "wikipedia_title": summary.get("title"),

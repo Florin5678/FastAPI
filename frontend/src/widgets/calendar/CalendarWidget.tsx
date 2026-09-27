@@ -85,10 +85,12 @@ export function CalendarWidget({ data }: WidgetProps<CalendarData>) {
               <li key={`${e.id}-${e.start}`}>
                 <a className="calendar-event" href={e.link ?? undefined} target="_blank" rel="noopener noreferrer" title={e.calendar ?? undefined}>
                   <span className="event-dot" style={{ background: e.color ?? 'var(--accent)' }} aria-hidden />
-                  <span className="event-time">{timeRange(e)}</span>
                   <span className="event-text">
                     <span className="event-title">{e.title}</span>
-                    {e.location && <span className="event-location">{e.location}</span>}
+                    <span className="event-meta">
+                      <span className="event-time">{timeRange(e)}</span>
+                      {e.location && <span className="event-location"> · {e.location}</span>}
+                    </span>
                   </span>
                 </a>
               </li>
