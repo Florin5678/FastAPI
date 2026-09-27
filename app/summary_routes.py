@@ -1,38 +1,75 @@
-from datetime import datetime, time
-from fastapi import APIRouter, Depends, HTTPException, Query
+from datetime import datetime, time, timezone
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Email
-from app.gmail_routes import _get_user
+from app.models import Email, User
+from app.security import get_current_user
 from app.summarize import get_client, analyze_email, summarize_pending
 
 router = APIRouter()
 
 
-def _email_dict(e: Email) -> dict:
-    return {
+def _email_dict(e: Email, include_body: bool = False) -> dict:
+    data = {
         "id": e.id,
         "gmail_id": e.gmail_id,
         "subject": e.subject,
         "sender": e.sender,
-        "timestamp": e.timestamp.isoformat() if e.timestamp else None,
+        "snippet": e.snippet,
+        "timestamp": e.timestamp.isoformat() + "Z" if e.timestamp else None,
         "category": e.category,
         "summary": e.summary,
     }
+    if include_body:
+        data["full_body"] = e.full_body
+    return data
+
+
+@router.get("/api/me")
+def me(user: User = Depends(get_current_user)):
+    return {
+        "email": user.email,
+        "name": user.name,
+        "summaries_enabled": get_client() is not None,
+    }
+
+
+@router.get("/emails")
+def list_emails(
+    category: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Stored emails, newest first, optionally filtered by category."""
+    query = db.query(Email).filter(Email.user_id == user.id)
+    if category:
+        query = query.filter(Email.category == category)
+    total = query.count()
+    rows = query.order_by(Email.timestamp.desc()).offset(offset).limit(min(limit, 200)).all()
+    return {"total": total, "emails": [_email_dict(e) for e in rows]}
+
+
+@router.get("/emails/{email_id}")
+def get_email(email_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = db.query(Email).filter(Email.id == email_id, Email.user_id == user.id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Email not found")
+    return _email_dict(row, include_body=True)
 
 
 @router.post("/summaries/run")
-def run_summaries(email: str = Query(...), limit: int = 10, db: Session = Depends(get_db)):
+def run_summaries(limit: int = 10, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Summarize stored emails that don't have a summary yet (called by the sync workflow)."""
-    user = _get_user(db, email)
     return summarize_pending(db, user.id, limit=limit)
 
 
 @router.get("/summaries/{email_id}")
-def get_summary(email_id: int, email: str = Query(...), db: Session = Depends(get_db)):
+def get_summary(email_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Summary for one stored email (by our DB id). Summarizes it on demand if needed."""
-    user = _get_user(db, email)
     row = db.query(Email).filter(Email.id == email_id, Email.user_id == user.id).first()
     if row is None:
         raise HTTPException(status_code=404, detail="Email not found")
@@ -50,10 +87,19 @@ def get_summary(email_id: int, email: str = Query(...), db: Session = Depends(ge
 
 
 @router.get("/digest/today")
-def digest_today(email: str = Query(...), db: Session = Depends(get_db)):
-    """Today's emails (UTC), grouped by category."""
-    user = _get_user(db, email)
-    start = datetime.combine(datetime.utcnow().date(), time.min)
+def digest_today(
+    since: Optional[datetime] = None,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Today's emails grouped by category. Pass ?since= (the viewer's local midnight,
+    ISO 8601 with offset) to use their timezone; defaults to UTC midnight."""
+    if since is None:
+        start = datetime.combine(datetime.utcnow().date(), time.min)
+    elif since.tzinfo is not None:
+        start = since.astimezone(timezone.utc).replace(tzinfo=None)  # DB stores naive UTC
+    else:
+        start = since
     rows = (
         db.query(Email)
         .filter(Email.user_id == user.id, Email.timestamp >= start)

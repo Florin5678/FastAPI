@@ -1,7 +1,10 @@
 import os
+import secrets
 import requests
+from typing import Optional
+from urllib.parse import urlencode
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -23,21 +26,44 @@ SCOPE = "https://www.googleapis.com/auth/gmail.readonly email profile"
 
 
 @router.get("/login")
-def google_login():
-    url = (
-        f"{AUTH_URL}"
-        f"?client_id={GOOGLE_CLIENT_ID}"
-        f"&redirect_uri={GOOGLE_REDIRECT_URI}"
-        f"&response_type=code"
-        f"&scope={SCOPE}"
-        f"&access_type=offline"
-        f"&prompt=consent"
-    )
-    return RedirectResponse(url)
+def google_login(request: Request):
+    # Random state ties the callback to this browser (protects against login CSRF)
+    state = secrets.token_urlsafe(24)
+    request.session["oauth_state"] = state
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": GOOGLE_REDIRECT_URI,
+        "response_type": "code",
+        "scope": SCOPE,
+        "access_type": "offline",
+        "prompt": "consent",
+        "state": state,
+    }
+    return RedirectResponse(f"{AUTH_URL}?{urlencode(params)}")
+
+
+@router.post("/logout")
+def logout(request: Request):
+    request.session.clear()
+    return {"message": "Logged out"}
 
 
 @router.get("/callback")
-def google_callback(request: Request, code: str, db: Session = Depends(get_db)):
+def google_callback(
+    request: Request,
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    if error:
+        # e.g. the user clicked "Cancel" on Google's consent screen
+        return RedirectResponse("/?" + urlencode({"login_error": error}))
+
+    expected_state = request.session.pop("oauth_state", None)
+    if not code or not state or not expected_state or not secrets.compare_digest(state, expected_state):
+        raise HTTPException(status_code=400, detail="Invalid login attempt - start again from the sign-in page")
+
     # Exchange code for tokens
     data = {
         "code": code,
@@ -47,7 +73,7 @@ def google_callback(request: Request, code: str, db: Session = Depends(get_db)):
         "grant_type": "authorization_code",
     }
 
-    token_response = requests.post(TOKEN_URL, data=data)
+    token_response = requests.post(TOKEN_URL, data=data, timeout=15)
     tokens = token_response.json()
 
     access_token = tokens.get("access_token")
@@ -57,12 +83,17 @@ def google_callback(request: Request, code: str, db: Session = Depends(get_db)):
     # Fetch user info
     user_info = requests.get(
         USERINFO_URL,
-        headers={"Authorization": f"Bearer {access_token}"}
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=15,
     ).json()
 
     google_id = user_info.get("id")
     email = user_info.get("email")
     name = user_info.get("name")
+
+    if not access_token or not google_id or not email:
+        # Never create a half-empty user row (this is what caused the early IntegrityError)
+        return RedirectResponse("/?" + urlencode({"login_error": "google_login_failed"}))
 
     # --- Save/update the user ---
     user = db.query(User).filter(User.google_id == google_id).first()
@@ -106,7 +137,6 @@ def google_callback(request: Request, code: str, db: Session = Depends(get_db)):
 
     db.commit()
 
-    return {
-        "message": "Google OAuth successful",
-        "user": {"email": email, "name": name},
-    }
+    # Signed-in from now on: the frontend is served from this same app
+    request.session["user_id"] = user.id
+    return RedirectResponse("/")

@@ -1,25 +1,19 @@
 import base64
+import html
+import re
 import requests
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import User, Email
 from app.gmail_auth import get_valid_access_token
+from app.security import get_current_user
 
 router = APIRouter()
 
 GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
-
-
-def _get_user(db: Session, email: str) -> User:
-    """Temporary way to identify 'the user' until you add real session auth.
-    Pass ?email=you@gmail.com on requests for now."""
-    user = db.query(User).filter(User.email == email).first()
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
 
 
 def _get_access_token(db: Session, user: User) -> str:
@@ -50,17 +44,41 @@ def _gmail_get(path: str, access_token: str, params: dict) -> dict:
     return response.json()
 
 
-def _extract_body(payload: dict) -> str:
-    """Gmail bodies are base64url-encoded and can be nested in multipart parts."""
-    if payload.get("body", {}).get("data"):
-        data = payload["body"]["data"]
-        return base64.urlsafe_b64decode(data + "==").decode("utf-8", errors="ignore")
+def _decode(data: str) -> str:
+    return base64.urlsafe_b64decode(data + "==").decode("utf-8", errors="ignore")
 
+
+def _find_part(payload: dict, mime_type: str) -> str:
+    """Depth-first search for the first part of this type (bodies can be nested several levels deep)."""
+    if payload.get("mimeType") == mime_type and payload.get("body", {}).get("data"):
+        return _decode(payload["body"]["data"])
     for part in payload.get("parts", []):
-        if part.get("mimeType") == "text/plain" and part.get("body", {}).get("data"):
-            data = part["body"]["data"]
-            return base64.urlsafe_b64decode(data + "==").decode("utf-8", errors="ignore")
+        found = _find_part(part, mime_type)
+        if found:
+            return found
+    return ""
 
+
+def _html_to_text(html_body: str) -> str:
+    text = re.sub(r"(?is)<(script|style|head).*?</\1>", " ", html_body)
+    text = re.sub(r"(?i)<br\s*/?>|</(p|div|tr|li|h[1-6])>", "\n", text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = html.unescape(text)
+    text = re.sub(r"[ \t\xa0]+", " ", text)
+    return re.sub(r"\n\s*\n+", "\n\n", text).strip()
+
+
+def _extract_body(payload: dict) -> str:
+    """Gmail bodies are base64url-encoded, often nested in multipart parts. Prefer plain text."""
+    plain = _find_part(payload, "text/plain")
+    if plain:
+        return plain
+    html_body = _find_part(payload, "text/html")
+    if html_body:
+        return _html_to_text(html_body)
+    # Single-part message with no declared text type
+    if payload.get("body", {}).get("data"):
+        return _decode(payload["body"]["data"])
     return ""
 
 
@@ -80,24 +98,21 @@ def _header(headers: list, name: str) -> str:
 
 
 @router.get("/messages")
-def list_messages(email: str = Query(...), max_results: int = 10, db: Session = Depends(get_db)):
-    user = _get_user(db, email)
+def list_messages(user: User = Depends(get_current_user), max_results: int = 10, db: Session = Depends(get_db)):
     access_token = _get_access_token(db, user)
 
     return _gmail_get("/messages", access_token, {"maxResults": max_results})
 
 
 @router.get("/message/{message_id}")
-def get_message(message_id: str, email: str = Query(...), db: Session = Depends(get_db)):
-    user = _get_user(db, email)
+def get_message(message_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     access_token = _get_access_token(db, user)
 
     return _gmail_get(f"/messages/{message_id}", access_token, {"format": "full"})
 
 
 @router.post("/sync/gmail")
-def sync_gmail(email: str = Query(...), max_results: int = 20, db: Session = Depends(get_db)):
-    user = _get_user(db, email)
+def sync_gmail(user: User = Depends(get_current_user), max_results: int = 20, db: Session = Depends(get_db)):
     access_token = _get_access_token(db, user)
 
     list_data = _gmail_get("/messages", access_token, {"maxResults": max_results})

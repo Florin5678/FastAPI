@@ -7,3 +7,4 @@ psycopg2-binary
 cryptography
 alembic
 anthropic
+itsdangerous

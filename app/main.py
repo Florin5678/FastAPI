@@ -1,24 +1,46 @@
-from fastapi import FastAPI, Depends
+import hashlib
+import hmac
+import os
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
 from app.gmail_routes import router as gmail_router
 from app.summary_routes import router as summary_router
 from app.auth.google_oauth import router as google_router
-from app.security import require_api_key
 
 app = FastAPI()
 
-@app.get("/")
-def root():
+# Signed session cookie for the browser frontend. The signing secret is derived from
+# ENCRYPTION_KEY so there's no extra env var to manage (SESSION_SECRET overrides it).
+session_secret = os.getenv("SESSION_SECRET") or hmac.new(
+    os.environ["ENCRYPTION_KEY"].encode(), b"session-cookie", hashlib.sha256
+).hexdigest()
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=session_secret,
+    same_site="lax",
+    https_only=os.getenv("SESSION_HTTPS_ONLY", "true") == "true",
+    max_age=30 * 24 * 3600,
+)
+
+
+@app.get("/health")
+def health():
     return {"status": "ok"}
 
 # Include Google OAuth routes (public - Google redirects the browser here)
 app.include_router(google_router, prefix="/auth/google")
 
-# Everything that exposes mail data requires the X-API-Key header
-protected = [Depends(require_api_key)]
+# Include Gmail routes (signed-in session or X-API-Key)
+app.include_router(gmail_router, prefix="/gmail", tags=["gmail"])
 
-# Include Gmail routes
-app.include_router(gmail_router, prefix="/gmail", tags=["gmail"], dependencies=protected)
+# Include email list, summary + digest routes (signed-in session or X-API-Key)
+app.include_router(summary_router, tags=["summaries"])
 
-# Include summary + digest routes
-app.include_router(summary_router, tags=["summaries"], dependencies=protected)
+# The React frontend (built into frontend/dist) is served from everything else
+FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+if FRONTEND_DIST.is_dir():
+    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
