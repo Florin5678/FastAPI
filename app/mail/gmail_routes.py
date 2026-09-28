@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models import User, Email
 from app.auth.google_tokens import get_valid_access_token
-from app.core.security import get_current_user
+from app.core.security import get_current_user, get_sync_user
 
 router = APIRouter()
 
@@ -112,7 +112,7 @@ def get_message(message_id: str, user: User = Depends(get_current_user), db: Ses
 
 
 @router.post("/sync/gmail")
-def sync_gmail(user: User = Depends(get_current_user), max_results: int = 20, db: Session = Depends(get_db)):
+def sync_gmail(user: User = Depends(get_sync_user), max_results: int = 20, db: Session = Depends(get_db)):
     access_token = _get_access_token(db, user)
 
     list_data = _gmail_get("/messages", access_token, {"maxResults": max_results})

@@ -44,6 +44,29 @@ def get_current_user(
     raise HTTPException(status_code=401, detail="Not signed in")
 
 
+# A second key that can only start the Gmail sync (it reads nothing back), so it is safe
+# to store in an external scheduler (cron-job.org). Set it as SYNC_API_KEY on Render.
+SYNC_API_KEY = os.getenv("SYNC_API_KEY")
+
+
+def get_sync_user(
+    request: Request,
+    email: Optional[str] = Query(default=None, description="Only used with X-API-Key"),
+    x_api_key: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+) -> User:
+    """Like get_current_user, but also accepts SYNC_API_KEY. Use it only on the sync
+    endpoint."""
+    if x_api_key is not None and SYNC_API_KEY and secrets.compare_digest(x_api_key, SYNC_API_KEY):
+        if not email:
+            raise HTTPException(status_code=400, detail="?email= is required when using X-API-Key")
+        user = db.query(User).filter(User.email == email).first()
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        return user
+    return get_current_user(request, email, x_api_key, db)
+
+
 # Journal history is extra-private: reading/editing past entries requires a fresh
 # Google sign-in in this browser session (not just the session cookie, and never
 # the X-API-Key used by automation).
