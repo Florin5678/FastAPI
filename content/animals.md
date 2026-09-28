@@ -8,6 +8,7 @@ lines freely; titles must match an English Wikipedia article.
 
 - Axolotl
 - Octopus
+- Pistol shrimp
 - Mantis shrimp
 - Tardigrade
 - Platypus
@@ -135,3 +136,5 @@ lines freely; titles must match an English Wikipedia article.
 - Camel
 - Vampire bat
 - Flying fox
+- Cat
+- Dog
