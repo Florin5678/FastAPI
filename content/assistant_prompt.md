@@ -26,7 +26,7 @@ Here is my personal dashboard briefing for {when}. Use it as context.
 - [x] Email: Tell me which whether there are any important emails need whether any of them need a reply today.
 - [x] Slack: Check for any new Slack messages from the last 24 hours and tell me which ones need a reply (check Slack directly).
 - [x] Urgent tasks: Tell me which urgent tasks need addressing (see Notes & reminders).
-- [x] Meal recommendations: Suggest meals and snacks for the rest of today that fit what I've already eaten (see Nutrition) and my Pescatarian diet.
+- [x] Meal recommendations: Suggest Pescatarian or Vegetarian friendly meals and snacks for the rest of today that fit what I've already eaten (see Nutrition).
 - [x] Workout recommendations: Suggest today's workout based on what I've trained recently (see Gym), so muscle groups get enough rest.
 - [x] News digest: Present up to 3 most important news headlines across all categories.
 - [x] Mental health: Either give me a practical suggestion for my wellbeing today (a break, a walk, time offline, reaching out to someone) based on how busy my day looks; alternatively give me one journaling question for today.
@@ -37,7 +37,7 @@ Brief me.
 
 ## Briefing
 
-- Email: 10
+- Email: 15
 - Calendar: 12
 - Weather: on
 - Nutrition: 8
