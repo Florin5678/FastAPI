@@ -107,15 +107,42 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     }
 
 
+def _duration(minutes: int) -> str:
+    hours, mins = divmod(minutes, 60)
+    if hours and mins:
+        return f"{hours} h {mins} min"
+    return f"{hours} h" if hours else f"{mins} min"
+
+
+def _when(e: dict) -> str:
+    """"Mon 28 Sep 09:00–10:30 (1 h 30 min)" in the event's local time (the API returns
+    times in the user's zone), so Claude can work out free time between events."""
+    if e["all_day"]:
+        first = datetime.fromisoformat(e["start"])
+        days = (datetime.fromisoformat(e["end"]) - first).days if e["end"] else 1
+        if days <= 1:
+            return f"{first:%a %d %b}, all day"
+        return f"{first:%a %d %b} – {first + timedelta(days=days - 1):%a %d %b}, all day ({days} days)"
+    start = datetime.fromisoformat(e["start"])
+    if not e["end"]:
+        return f"{start:%a %d %b %H:%M}"
+    end = datetime.fromisoformat(e["end"]).astimezone(start.tzinfo)
+    minutes = int((end - start).total_seconds() // 60)
+    end_text = f"{end:%H:%M}" if end.date() == start.date() else f"{end:%a %d %b %H:%M}"
+    return f"{start:%a %d %b %H:%M}–{end_text} ({_duration(minutes)})"
+
+
 def brief(data: dict, limit: int | None = None) -> str:
     if data["needs_setup"]:
         return "Calendar not connected yet."
     if not data["events"]:
         return f"No events in the next {data['days']} day(s)."
-    lines = [f"Upcoming events (next {data['days']} days):"]
-    for e in data["events"][:limit or 12]:
-        when = f"{e['start']} (all day)" if e["all_day"] else e["start"]
-        lines.append(f"- {when}: {e['title']}" + (f" at {e['location']}" if e["location"] else ""))
+    shown = data["events"][:limit or 12]
+    lines = [f"Upcoming events (next {data['days']} days, local time, with duration):"]
+    for e in shown:
+        lines.append(f"- {_when(e)}: {e['title']}" + (f" at {e['location']}" if e["location"] else ""))
+    if len(data["events"]) > len(shown):
+        lines.append(f"(+{len(data['events']) - len(shown)} more events not listed; don't assume that time is free)")
     return "\n".join(lines)
 
 
