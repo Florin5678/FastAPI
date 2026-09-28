@@ -362,6 +362,68 @@ def delete_food(entry_id: int) -> str:
         return "Deleted"
 
 
+NUTRIENT_KEYS = ("calories", "protein", "carbs", "fat", "fiber", "sugar", "sat_fat")
+
+
+@mcp.tool(annotations=EDIT)
+def update_food(entry_id: int, grams: Optional[float] = None, name: Optional[str] = None, day: Optional[str] = None,
+                calories: Optional[float] = None, protein: Optional[float] = None, carbs: Optional[float] = None,
+                fat: Optional[float] = None, fiber: Optional[float] = None, sugar: Optional[float] = None,
+                sat_fat: Optional[float] = None) -> dict:
+    """Edit a logged food (ids from get_nutrition). Change only `grams` to rescale its values to the new
+    amount; or give new nutrient values for the amount eaten (others stay as they are); or rename it, or
+    move it to another `day` (like 2026-09-28)."""
+    with _Call() as call:
+        row = call.db.query(NutritionEntry).filter(NutritionEntry.id == entry_id, NutritionEntry.user_id == call.user.id).first()
+        if row is None:
+            raise ToolError("Entry not found")
+        before = nutrition._entry_dict(row)
+        given = {k: v for k, v in zip(NUTRIENT_KEYS, (calories, protein, carbs, fat, fiber, sugar, sat_fat), strict=True) if v is not None}
+        patch: dict[str, Any] = {}
+        if given:
+            patch["nutrients"] = nutrition.Nutrients(**{**before["nutrients"], **given})
+        if grams is not None:
+            patch["grams"] = grams
+        if name is not None:
+            patch["name"] = name
+        if day is not None:
+            patch["day"] = _day(day)
+        entry = _run(nutrition.update_entry, entry_id, nutrition.EntryPatch(**patch), user=call.user, db=call.db)
+        call.record("update_food", f'Changed {before["name"]} ({before["day"]}): {round(before["nutrients"]["calories"])} → {round(entry["nutrients"]["calories"])} kcal',
+                    {"action": "restore_food", "args": {"id": entry_id, "entry": before}})
+        return entry
+
+
+@mcp.tool(annotations=READ)
+def list_saved_foods() -> dict:
+    """The user's saved foods ("My foods"), most recently used first, with values per 100 g and the usual
+    amount in grams. Use log_saved_food to log one again."""
+    with _Call() as call:
+        return _run(nutrition.list_saved_foods, user=call.user, db=call.db)
+
+
+@mcp.tool(annotations=WRITE)
+def log_saved_food(food: str, grams: Optional[float] = None, day: Optional[str] = None) -> dict:
+    """Log one of the user's saved foods again. `food`: its name (or id) from list_saved_foods; `grams`:
+    the amount eaten (default: the amount used last time, else 100 g); `day` default today."""
+    with _Call() as call:
+        foods = _run(nutrition.list_saved_foods, user=call.user, db=call.db)["foods"]
+        wanted = food.strip().lower()
+        match = [f for f in foods if f["id"] == food or f["name"].lower() == wanted] or [f for f in foods if wanted in f["name"].lower()]
+        if len(match) != 1:
+            names = ", ".join(f["name"] for f in (match or foods)[:15])
+            raise ToolError(f"{'Several' if match else 'No'} saved foods match '{food}'. Saved foods: {names or 'none yet'}")
+        saved = match[0]
+        amount = grams or saved.get("grams") or 100
+        nutrients = {k: round(saved["per_100g"].get(k, 0) * amount / 100, 1) for k in NUTRIENT_KEYS}
+        entry = _run(nutrition.add_entry, nutrition.EntryIn(
+            day=_day(day), name=saved["name"], grams=amount, nutrients=nutrition.Nutrients(**nutrients), saved_food_id=saved["id"],
+        ), user=call.user, db=call.db)
+        call.record("log_food", f'Logged {entry["name"]}, {round(amount)} g ({round(nutrients["calories"])} kcal) on {entry["day"]}',
+                    {"action": "delete_food", "args": {"id": entry["id"]}})
+        return entry
+
+
 # ---- Gym ----
 
 @mcp.tool(annotations=WRITE)

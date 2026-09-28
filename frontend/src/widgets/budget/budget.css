@@ -23,8 +23,6 @@
 }
 .budget-form input:disabled { opacity: 0.5; }
 .budget-form .dialog-actions { align-items: center; }
-.spacer { flex: 1; }
-.danger-text { color: var(--danger); }
 
 /* Monthly report page */
 .budget-page { display: flex; flex-direction: column; gap: 16px; }

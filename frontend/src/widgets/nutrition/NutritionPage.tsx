@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   localDate, nutritionApi, shiftDay,
-  type NutrientRow, type NutritionDayData, type NutritionHistory,
+  type FoodEntry, type NutrientRow, type NutritionDayData, type NutritionHistory,
 } from '../../api'
 import { AddFoodDialog } from './AddFoodDialog'
+import { EditFoodDialog } from './EditFoodDialog'
 import { FoodLog, NutrientBars } from './NutritionParts'
 import { barState, fmt } from './nutrients'
 
@@ -32,6 +33,7 @@ export function NutritionPage() {
   const [error, setError] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [removing, setRemoving] = useState<number | null>(null)
+  const [editing, setEditing] = useState<FoodEntry | null>(null)
 
   const [range, setRange] = useState(14)
   const [history, setHistory] = useState<NutritionHistory | null>(null)
@@ -111,7 +113,7 @@ export function NutritionPage() {
             <h3>Food ({data.entries.length})</h3>
             {data.entries.length === 0
               ? <p className="muted small">Nothing logged {day === today ? 'yet today' : 'on this day'}.</p>
-              : <FoodLog entries={data.entries} removing={removing} onRemove={remove} />}
+              : <FoodLog entries={data.entries} removing={removing} onRemove={remove} onEdit={setEditing} />}
           </>
         )}
       </div>
@@ -128,6 +130,9 @@ export function NutritionPage() {
       {historyError && <p className="error-text">{historyError}</p>}
       {history && <HistoryTable history={history} selected={day} onPick={goTo} />}
 
+      {editing && (
+        <EditFoodDialog entry={editing} onSaved={() => { setEditing(null); changed() }} onClose={() => setEditing(null)} />
+      )}
       {adding && data && (
         <AddFoodDialog
           day={day}

@@ -26,17 +26,22 @@ export function NutrientBars({ nutrients }: { nutrients: NutrientRow[] }) {
   )
 }
 
-export function FoodLog({ entries, removing, onRemove }: { entries: FoodEntry[]; removing: number | null; onRemove: (id: number) => void }) {
+export function FoodLog({ entries, removing, onRemove, onEdit }: {
+  entries: FoodEntry[]
+  removing: number | null
+  onRemove: (id: number) => void
+  onEdit: (entry: FoodEntry) => void
+}) {
   return (
     <ul className="item-list">
       {entries.map((e) => (
         <li key={e.id}>
-          <span className="item-name">
+          <button className="item-name food-edit" onClick={() => onEdit(e)} title="Edit">
             {e.name}
             <span className="muted small">
               {e.grams ? ` · ${fmt(e.grams)} g` : ''} · {fmt(e.nutrients.calories)} kcal · {fmt(e.nutrients.protein)} g protein
             </span>
-          </span>
+          </button>
           <button
             className="icon-button"
             onClick={() => onRemove(e.id)}

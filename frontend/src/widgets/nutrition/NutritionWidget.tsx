@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { localDate, nutritionApi, type NutritionDayData } from '../../api'
+import { localDate, nutritionApi, type FoodEntry, type NutritionDayData } from '../../api'
 import type { WidgetProps } from '../types'
 import { AddFoodDialog } from './AddFoodDialog'
+import { EditFoodDialog } from './EditFoodDialog'
 import { FoodLog, NutrientBars } from './NutritionParts'
 import './nutrition.css'
 
@@ -11,6 +12,7 @@ export function NutritionWidget({ data, reload, actions }: WidgetProps<Nutrition
   const [adding, setAdding] = useState(false)
   const [showLog, setShowLog] = useState(false)
   const [removing, setRemoving] = useState<number | null>(null)
+  const [editing, setEditing] = useState<FoodEntry | null>(null)
 
   const remove = async (id: number) => {
     setRemoving(id)
@@ -37,9 +39,12 @@ export function NutritionWidget({ data, reload, actions }: WidgetProps<Nutrition
       {showLog && (
         data.entries.length === 0
           ? <p className="muted small">Nothing logged yet today.</p>
-          : <FoodLog entries={data.entries} removing={removing} onRemove={remove} />
+          : <FoodLog entries={data.entries} removing={removing} onRemove={remove} onEdit={setEditing} />
       )}
 
+      {editing && (
+        <EditFoodDialog entry={editing} onSaved={() => { setEditing(null); reload() }} onClose={() => setEditing(null)} />
+      )}
       {adding && (
         <AddFoodDialog
           day={localDate()}

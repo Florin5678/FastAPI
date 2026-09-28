@@ -32,3 +32,14 @@
 .food-results button:hover { background: var(--surface-2); }
 .picked { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .manual-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+
+/* My foods, grouped results, editing */
+.food-group-title { margin: 4px 0 -4px; font-size: 13px; font-weight: 650; }
+.food-results li.saved-food { display: flex; align-items: center; }
+.food-results li.saved-food > button:first-child { flex: 1; min-width: 0; }
+.food-results li.saved-food .icon-button {
+  flex: none; width: 28px; height: 28px; margin-right: 6px; padding: 0; flex-direction: row; align-items: center; justify-content: center;
+}
+.food-edit { border: 0; background: none; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.food-edit:hover { text-decoration: underline; }
+.food-remove { margin-right: auto; }

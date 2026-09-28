@@ -5,12 +5,16 @@
 # starts at zero. nutrition_days snapshots the goals that applied on a day when
 # food is logged, so past days are judged against the goals of that time.
 # The widget opens into a full view (frontend: NutritionPage) to browse any day.
+# Entries can be edited (amount, values, name, day). Foods entered by hand can be
+# saved to "My foods" (widget row config["saved_foods"], values per 100 g) and
+# picked again later.
 #
 # Food lookup: USDA FoodData Central (free; needs a free key from
 # https://fdc.nal.usda.gov/api-key-signup.html in USDA_API_KEY - the shared
 # DEMO_KEY only allows ~10 lookups/hour. With a key: 1,000 requests/hour).
 import os
 import time
+import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import quote, urlencode
@@ -55,6 +59,7 @@ DEFAULT_GOALS = {
     "fiber": 38, "sugar": 70, "sat_fat": 30,
 }
 GOAL_MAX = {"calories": 10000}
+MAX_SAVED_FOODS = 300
 
 _search_cache: dict[str, tuple[float, list]] = {}
 
@@ -164,9 +169,67 @@ class EntryIn(BaseModel):
     day: date  # the viewer's local date (today, or a past day being filled in)
     name: str = Field(min_length=1, max_length=200)
     grams: Optional[float] = Field(None, gt=0, le=5000)
-    nutrients: Nutrients
+    nutrients: Nutrients  # for the amount eaten
     source: str = Field("manual", pattern="^(manual|usda)$")
     fdc_id: Optional[int] = None
+    per_100g: Optional[Nutrients] = None  # with save=True: store the food in "My foods"
+    save: bool = False
+    saved_food_id: Optional[str] = Field(None, max_length=40)  # picked from "My foods" (moves it to the top)
+
+
+class EntryPatch(BaseModel):
+    day: Optional[date] = None
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    grams: Optional[float] = Field(None, gt=0, le=5000)
+    nutrients: Optional[Nutrients] = None  # new totals; if only grams changes, totals are rescaled
+
+
+def _ensure_day_snapshot(db: Session, user: User, day: date) -> None:
+    """Snapshot the goals for a day the first time food is logged on it. For today,
+    later logs refresh the snapshot (so a goal change today applies today); past days
+    keep theirs."""
+    snapshot = db.query(NutritionDay).filter(NutritionDay.user_id == user.id, NutritionDay.day == day).first()
+    is_recent = day >= datetime.now(timezone.utc).date() - timedelta(days=1)
+    if snapshot is None:
+        db.add(NutritionDay(user_id=user.id, day=day, goals=_current_goals(db, user)))
+    elif is_recent:
+        snapshot.goals = _current_goals(db, user)
+
+
+# ---- "My foods": foods entered by hand, kept to pick again (values per 100 g) ----
+
+def _saved_foods(row) -> list[dict]:
+    return [dict(f) for f in (row.config or {}).get("saved_foods", [])]
+
+
+def _store_saved_foods(row, foods: list[dict]) -> None:
+    foods.sort(key=lambda f: f.get("used_at") or "", reverse=True)
+    # JSON columns aren't mutation-tracked: assign a new dict
+    row.config = {**(row.config or {}), "saved_foods": foods[:MAX_SAVED_FOODS]}
+
+
+def save_food(db: Session, user: User, name: str, per_100g: dict, grams: Optional[float]) -> dict:
+    """Add a food to "My foods", or update the one with the same name."""
+    row = widget_row(db, user, WIDGET_ID)
+    foods = _saved_foods(row)
+    now = datetime.now(timezone.utc).isoformat()
+    existing = next((f for f in foods if f["name"].lower() == name.strip().lower()), None)
+    food = existing or {"id": uuid.uuid4().hex[:12], "uses": 0}
+    food.update(name=name.strip(), per_100g={k: round(float(v), 2) for k, v in per_100g.items()},
+                grams=grams, used_at=now, uses=food.get("uses", 0) + 1)
+    if existing is None:
+        foods.append(food)
+    _store_saved_foods(row, foods)
+    return food
+
+
+def _mark_used(db: Session, user: User, food_id: str, grams: Optional[float]) -> None:
+    row = widget_row(db, user, WIDGET_ID)
+    foods = _saved_foods(row)
+    food = next((f for f in foods if f["id"] == food_id), None)
+    if food is not None:
+        food.update(used_at=datetime.now(timezone.utc).isoformat(), uses=food.get("uses", 0) + 1, grams=grams or food.get("grams"))
+        _store_saved_foods(row, foods)
 
 
 @router.get("/days/{day}")
@@ -237,20 +300,61 @@ def add_entry(body: EntryIn, user: User = Depends(get_current_user), db: Session
         **{k: round(v, 1) for k, v in body.nutrients.model_dump().items()},
     )
     db.add(entry)
-
-    # Snapshot the goals for this day the first time food is logged on it. For
-    # today, later logs refresh the snapshot (so a goal change today applies today);
-    # past days keep theirs.
-    snapshot = db.query(NutritionDay).filter(NutritionDay.user_id == user.id, NutritionDay.day == body.day).first()
-    is_recent = body.day >= datetime.now(timezone.utc).date() - timedelta(days=1)
-    if snapshot is None:
-        db.add(NutritionDay(user_id=user.id, day=body.day, goals=_current_goals(db, user)))
-    elif is_recent:
-        snapshot.goals = _current_goals(db, user)
+    _ensure_day_snapshot(db, user, body.day)
+    if body.save and body.per_100g is not None:
+        save_food(db, user, body.name, body.per_100g.model_dump(), body.grams)
+    elif body.saved_food_id:
+        _mark_used(db, user, body.saved_food_id, body.grams)
 
     db.commit()
     db.refresh(entry)
     return _entry_dict(entry)
+
+
+@router.patch("/entries/{entry_id}")
+def update_entry(entry_id: int, body: EntryPatch, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Edit a logged food: name, day, amount and/or values. Changing only the amount
+    rescales the values (when the entry has an amount)."""
+    entry = db.query(NutritionEntry).filter(NutritionEntry.id == entry_id, NutritionEntry.user_id == user.id).first()
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    if body.day is not None:
+        if body.day > _latest_allowed_day():
+            raise HTTPException(status_code=422, detail="You can't log food for a future day")
+        entry.day = body.day
+        _ensure_day_snapshot(db, user, body.day)
+    if body.name is not None:
+        entry.name = body.name.strip()
+    if body.nutrients is not None:
+        for key, value in body.nutrients.model_dump().items():
+            setattr(entry, key, round(value, 1))
+    elif body.grams is not None and entry.grams:
+        factor = body.grams / entry.grams
+        for key, *_ in NUTRIENTS:
+            setattr(entry, key, round(getattr(entry, key) * factor, 1))
+    if body.grams is not None:
+        entry.grams = body.grams
+    db.commit()
+    db.refresh(entry)
+    return _entry_dict(entry)
+
+
+@router.get("/saved-foods")
+def list_saved_foods(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """ "My foods", most recently used first (values per 100 g)."""
+    return {"foods": _saved_foods(widget_row(db, user, WIDGET_ID))}
+
+
+@router.delete("/saved-foods/{food_id}")
+def delete_saved_food(food_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = widget_row(db, user, WIDGET_ID)
+    foods = _saved_foods(row)
+    remaining = [f for f in foods if f["id"] != food_id]
+    if len(remaining) == len(foods):
+        raise HTTPException(status_code=404, detail="Saved food not found")
+    _store_saved_foods(row, remaining)
+    db.commit()
+    return {"deleted": food_id}
 
 
 @router.delete("/entries/{entry_id}")

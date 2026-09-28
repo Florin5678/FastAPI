@@ -63,6 +63,10 @@ UNDO_ACTIONS: dict[str, Any] = {
     "restore_note": lambda db, user, a: _restore_item(db, user, "notes", a["item"]),
     "delete_food": lambda db, user, a: nutrition.delete_entry(a["id"], user=user, db=db),
     "readd_food": lambda db, user, a: _readd_food(db, user, a["entry"]),
+    "restore_food": lambda db, user, a: nutrition.update_entry(a["id"], nutrition.EntryPatch(
+        day=date.fromisoformat(a["entry"]["day"]), name=a["entry"]["name"], grams=a["entry"].get("grams"),
+        nutrients=nutrition.Nutrients(**a["entry"]["nutrients"]),
+    ), user=user, db=db),
     "delete_workout": lambda db, user, a: gym.delete_workout(a["id"], user=user, db=db),
     "readd_workout": lambda db, user, a: gym.log_workout(gym.WorkoutIn(**a["workout"]), user=user, db=db),
     "delete_budget_entry": lambda db, user, a: budget.delete_entry(a["id"], user=user, db=db),
