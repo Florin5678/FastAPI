@@ -12,3 +12,4 @@ freely; workouts you already logged keep their name.
 - Biceps
 - Triceps
 - Back
+- HEMA
