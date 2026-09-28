@@ -23,6 +23,7 @@
 .weather-city { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
 .weather-country { font-size: 12px; opacity: 0.85; }
 .weather-feels { font-size: 13px; opacity: 0.9; }
+.weather-source { position: relative; z-index: 1; font-size: 10px; opacity: 0.7; text-align: right; }
 .weather-widget .weather-label { color: inherit; opacity: 0.9; }
 .weather-widget .segmented { background: rgb(255 255 255 / 0.16); text-shadow: none; }
 .weather-widget .segmented button { color: rgb(255 255 255 / 0.85); }

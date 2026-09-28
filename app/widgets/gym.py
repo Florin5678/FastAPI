@@ -128,7 +128,7 @@ register(WidgetDefinition(
     enabled_by_default=True,
     config_fields=(
         ConfigField("goal_workouts", "Workouts per week", "number", default=4, min=1, max=14),
-        ConfigField("goal_minutes", "Minutes per week", "number", default=180, min=0, max=3000),
+        ConfigField("goal_minutes", "Minutes per week", "number", default=300, min=0, max=3000),
     ),
 ))
 

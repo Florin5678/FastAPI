@@ -13,6 +13,7 @@ export type WeatherData = {
   current: { temperature: number; feels_like: number; humidity: number; wind_kmh: number; is_day: boolean; weather: Condition }
   today: { high: number; low: number; precipitation_probability: number | null; sunrise: string; sunset: string; weather: Condition }
   hours: { time: string; temperature: number; precipitation_probability: number | null; weather: Condition }[]
+  source: 'Open-Meteo' | 'MET Norway' // MET Norway is the fallback when Open-Meteo is unavailable
 }
 
 // Sky gradient for the background, from the WMO weather code
@@ -88,6 +89,7 @@ export function WeatherWidget({ data, updateSettings }: WidgetProps<WeatherData>
           </div>
         ))}
       </div>
+      {data.source === 'MET Norway' && <div className="weather-source">Weather data: MET Norway</div>}
     </div>
   )
 }
