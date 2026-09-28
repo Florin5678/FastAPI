@@ -22,7 +22,6 @@ PROMPT_FILE = Path(__file__).resolve().parents[2] / "content" / "assistant_promp
 PROMPT_DEFAULTS = {
     "instructions": "Here is my personal dashboard briefing for {when}. Use it as context.",
     "default question": "Give me a short overview of my day and three practical suggestions.",
-    "suggestions": [],
 }
 _prompt_cache: dict = {"mtime": None, "prompt": PROMPT_DEFAULTS, "briefing": {}}
 
@@ -32,8 +31,6 @@ def _load() -> None:
     if _prompt_cache["mtime"] == mtime:
         return
     parts = _sections(PROMPT_FILE.read_text(encoding="utf-8"))
-    suggestions = [line[2:].strip() for line in parts.get("suggestions", "").splitlines()
-                   if line.startswith("- ") and line[2:].strip()]
     instructions = parts.get("instructions") or PROMPT_DEFAULTS["instructions"]
     extras = _extra_instructions(parts.get("extra instructions", ""))
     if extras:
@@ -43,12 +40,11 @@ def _load() -> None:
     _prompt_cache.update(mtime=mtime, briefing=_briefing_rules(parts.get("briefing", "")), prompt={
         "instructions": instructions,
         "default_question": parts.get("default question") or PROMPT_DEFAULTS["default question"],
-        "suggestions": suggestions,
     })
 
 
 def load_prompt() -> dict:
-    """{"instructions", "default_question", "suggestions"} from the "## " sections of
+    """{"instructions", "default_question"} from the "## " sections of
     content/assistant_prompt.md, re-read when the file changes. Missing sections fall
     back to the defaults above."""
     _load()
@@ -139,8 +135,9 @@ register(WidgetDefinition(
     name="Assistant",
     description="A daily briefing from all your widgets, and one click to ask Claude about it on claude.ai (uses your Claude subscription, no extra cost).",
     fetch=fetch,
-    default_size=(8, 8),
-    min_size=(4, 6),
+    default_size=(4, 3),
+    min_size=(3, 3),
+    layout_version=2,  # v2: 8x8 -> 4x3 once the preview and question box were removed
     refresh_seconds=1800,
     enabled_by_default=True,
 ))

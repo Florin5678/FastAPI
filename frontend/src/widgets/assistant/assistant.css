@@ -1,18 +1,6 @@
 /* Assistant widget */
-.assistant-widget { display: flex; flex-direction: column; gap: 12px; height: 100%; }
-.assistant-briefing {
-  flex: 1; min-height: 0; overflow-y: auto;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px 18px; align-content: start;
-}
-.assistant-briefing h4 {
-  margin: 0 0 2px; font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
-}
-.assistant-briefing p { margin: 0; font-size: 13px; line-height: 1.45; white-space: pre-line; }
-.assistant-ask { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); padding-top: 10px; }
-.assistant-ask textarea {
-  width: 100%; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border);
-  background: var(--surface); color: var(--text); font: inherit; font-size: 14px; resize: vertical;
-}
-.assistant-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-.assistant-buttons { display: flex; gap: 6px; }
-.assistant-note { margin: 0; color: var(--accent); }
+.assistant-widget { display: flex; flex-direction: column; justify-content: center; gap: 8px; height: 100%; }
+.assistant-buttons { display: flex; gap: 8px; }
+.assistant-buttons .button { flex: 1; }
+.assistant-widget p { margin: 0; }
+.assistant-note { color: var(--accent); }

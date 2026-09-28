@@ -5,22 +5,21 @@ import './assistant.css'
 export type AssistantData = {
   sections: { widget: string; name: string; text: string }[]
   // Wording from content/assistant_prompt.md (editable without code changes)
-  prompt: { instructions: string; default_question: string; suggestions: string[] }
+  prompt: { instructions: string; default_question: string }
 }
 
 // claude.ai pre-fills a new chat from ?q=; beyond this length the prompt goes via the
 // clipboard only (long URLs can be cut off)
 const MAX_URL_PROMPT = 6000
 
-function buildPrompt(data: AssistantData, question: string): string {
+function buildPrompt(data: AssistantData): string {
   const when = new Date().toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
   const intro = data.prompt.instructions.replaceAll('{when}', when)
   const briefing = data.sections.map((s) => `## ${s.name}\n${s.text}`).join('\n\n')
-  return `${intro}\n\n${briefing}\n\nMy question: ${question.trim() || data.prompt.default_question}`
+  return `${intro}\n\n${briefing}\n\nMy question: ${data.prompt.default_question}`
 }
 
 export function AssistantWidget({ data }: WidgetProps<AssistantData>) {
-  const [question, setQuestion] = useState('')
   const [note, setNote] = useState<string | null>(null)
 
   const copy = async (text: string): Promise<boolean> => {
@@ -32,8 +31,8 @@ export function AssistantWidget({ data }: WidgetProps<AssistantData>) {
     }
   }
 
-  const ask = async () => {
-    const prompt = buildPrompt(data, question)
+  const briefMe = async () => {
+    const prompt = buildPrompt(data)
     const fits = encodeURIComponent(prompt).length <= MAX_URL_PROMPT
     // Open synchronously (inside the click) so pop-up blockers allow it
     window.open(fits ? `https://claude.ai/new?q=${encodeURIComponent(prompt)}` : 'https://claude.ai/new', '_blank', 'noopener')
@@ -44,43 +43,18 @@ export function AssistantWidget({ data }: WidgetProps<AssistantData>) {
   }
 
   const copyBriefing = async () => {
-    setNote(await copy(buildPrompt(data, question)) ? 'Briefing copied.' : "Couldn't copy (the browser blocked it).")
+    setNote(await copy(buildPrompt(data)) ? 'Briefing copied.' : "Couldn't copy (the browser blocked it).")
   }
 
   return (
     <div className="assistant-widget">
-      <div className="assistant-briefing" aria-label="Today's briefing">
-        {data.sections.length === 0 && <p className="muted small">Add some widgets to get a briefing.</p>}
-        {data.sections.map((s) => (
-          <section key={s.widget}>
-            <h4>{s.name}</h4>
-            <p>{s.text}</p>
-          </section>
-        ))}
+      <div className="assistant-buttons">
+        <button className="button ghost" onClick={copyBriefing}>Copy briefing</button>
+        <button className="button primary" onClick={briefMe}>Brief me ↗</button>
       </div>
-
-      <div className="assistant-ask">
-        <div className="chips compact">
-          {data.prompt.suggestions.map((s) => (
-            <button key={s} className="chip" onClick={() => setQuestion(s)}>{s}</button>
-          ))}
-        </div>
-        <textarea
-          rows={2}
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder={`Ask Claude about your day… (empty = "${data.prompt.default_question}")`}
-          aria-label="Question for Claude"
-        />
-        <div className="assistant-actions">
-          <span className="muted small">Uses your Claude subscription on claude.ai · your journal is never included</span>
-          <span className="assistant-buttons">
-            <button className="button ghost small-button" onClick={copyBriefing}>Copy briefing</button>
-            <button className="button primary small-button" onClick={ask}>Ask Claude ↗</button>
-          </span>
-        </div>
-        {note && <p className="small assistant-note">{note}</p>}
-      </div>
+      {note
+        ? <p className="small assistant-note">{note}</p>
+        : <p className="muted small">Opens claude.ai · your journal is never included</p>}
     </div>
   )
 }

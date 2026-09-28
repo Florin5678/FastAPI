@@ -1,8 +1,9 @@
 # Assistant prompt
 
 What the Assistant widget sends to Claude together with your daily briefing.
-Edit the text under each heading (keep the five `## ` headings as they are).
-`{when}` is replaced with the current day and time.
+Edit the text under each heading (keep the four `## ` headings as they are).
+`{when}` is replaced with the current day and time. "Default question" is what
+the "Brief me" button asks Claude, after the briefing.
 
 Under "Extra instructions", each line is one extra request added to the prompt:
 `- [x] Name: what to ask Claude` is on, `- [ ] Name: ...` is off. Tick or untick
@@ -33,13 +34,6 @@ Here is my personal dashboard briefing for {when}. Use it as context.
 ## Default question
 
 Brief me.
-
-## Suggestions
-
-- Plan my day
-- Anything I should not forget today?
-- Plan my meals for the day
-- Summarize my week so far
 
 ## Briefing
 
