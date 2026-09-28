@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { budgetApi } from '../../api'
 import type { WidgetProps } from '../types'
 import { EntryDialog } from './EntryDialog'
+import { MonthChart } from './MonthChart'
 import { formatMoney, monthTitle } from './budgetUtils'
 import './budget.css'
 
@@ -11,10 +12,7 @@ export type BudgetData = {
   currency: string
   income: number
   expenses: number
-  last_month_expenses: number | null
-  budget_total: number | null
-  categories: { category: string; spent: number; budget: number | null }[]
-  more_categories: number
+  history: { month: string; income: number; expenses: number }[] // last 6 months, oldest first
   paths: string[][]
 }
 
@@ -32,52 +30,26 @@ export function BudgetWidget({ data, actions, reload }: WidgetProps<BudgetData>)
     )
   }
 
-  const change = data.last_month_expenses ? Math.round(((data.expenses - data.last_month_expenses) / data.last_month_expenses) * 100) : null
   const net = data.income - data.expenses
-  const maxSpent = Math.max(1, ...data.categories.map((c) => c.spent))
 
   return (
-    <div className="budget-widget">
-      <div className="budget-summary">
-        <span className="budget-total">{money(data.expenses)}</span>
-        <span className="muted small">
-          spent in {monthTitle(data.month, false)}
-          {data.budget_total !== null && <> of {money(data.budget_total)} budgeted</>}
-          {change !== null && <> · {change > 0 ? '+' : ''}{change}% vs last month</>}
-        </span>
+    <div className="budget-widget budget-tile">
+      <div className="budget-tile-summary">
+        <span className="muted small">{monthTitle(data.month, false)}</span>
         <span className="small">
-          Income {money(data.income)} · <span className={net < 0 ? 'budget-neg' : 'budget-pos'}>net {net < 0 ? '−' : '+'}{money(Math.abs(net))}</span>
+          <span className="budget-dot budget-history-income" />Income <b>{money(data.income)}</b>
+          {' · '}
+          <span className="budget-dot budget-history-expenses" />Spent <b>{money(data.expenses)}</b>
+          {' · '}
+          <span className={net < 0 ? 'budget-neg' : 'budget-pos'}>net {net < 0 ? '−' : '+'}{money(Math.abs(net))}</span>
         </span>
       </div>
 
-      <ul className="budget-categories">
-        {data.categories.map((c) => {
-          const ratio = c.budget ? c.spent / c.budget : null
-          return (
-            <li key={c.category}>
-              <div className="budget-row">
-                <span className="budget-name">{c.category}</span>
-                <span className="muted small budget-value">
-                  {money(c.spent)}{c.budget !== null && <> / {money(c.budget)}</>}
-                </span>
-              </div>
-              <span className="bar">
-                {ratio !== null ? (
-                  <span className={`bar-fill ${ratio > 1 ? 'over' : ratio > 0.85 ? 'progress' : 'done'}`} style={{ width: `${Math.min(ratio, 1) * 100}%` }} />
-                ) : (
-                  <span className="bar-fill budget-neutral" style={{ width: `${(c.spent / maxSpent) * 100}%` }} />
-                )}
-              </span>
-            </li>
-          )
-        })}
-      </ul>
+      <MonthChart history={data.history} current={data.month} lastMonth={data.month} money={money} onPick={openReport} compact />
 
       <div className="budget-actions">
         <button className="button primary small-button" onClick={() => setAdding(true)}>+ Add</button>
-        <button className="button ghost small-button" onClick={openReport}>
-          Monthly report{data.more_categories > 0 && ` (+${data.more_categories} more)`} →
-        </button>
+        <button className="button ghost small-button" onClick={openReport}>Monthly report →</button>
       </div>
 
       {adding && (

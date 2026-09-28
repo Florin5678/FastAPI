@@ -106,3 +106,13 @@
 @media (prefers-color-scheme: dark) {
   .budget-pos { color: #5fd08e; }
 }
+
+/* Dashboard tile: this month + a 6-month chart filling the rest of the tile */
+.budget-tile { height: 100%; }
+.budget-tile-summary { display: flex; flex-direction: column; gap: 2px; }
+.budget-tile-summary b { font-variant-numeric: tabular-nums; }
+.budget-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
+.budget-history.compact { flex: 1; min-height: 90px; height: auto; gap: 8px; grid-template-columns: repeat(6, 1fr); }
+.budget-history.compact .budget-history-bars { gap: 1px; }
+.budget-history.compact .budget-history-bars span { width: 45%; border-radius: 2px 2px 0 0; }
+.budget-history.compact .budget-history-label { font-size: 10px; }

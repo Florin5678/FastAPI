@@ -30,7 +30,7 @@ LEVELS = 4
 MAX_ENTRIES = 20_000
 MAX_IMPORT_BYTES = 2 * 1024 * 1024
 HISTORY_MONTHS = 12
-TOP_CATEGORIES = 6
+TILE_MONTHS = 6  # months in the tile's income vs spending chart
 MONTH_RE = r"^\d{4}-(0[1-9]|1[0-2])$"
 CSV_HEADER = ["Month", "Category", "Sub-category", "Sub-sub-category", "Sub-sub-sub-category", "Amount"]
 
@@ -119,26 +119,22 @@ def _paths(db: Session, user: User) -> list[list[str]]:
 
 def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     month = local_today(ctx.tz).isoformat()[:7]
-    previous = _shift_month(month, -1)
-    totals = _totals(db, user, previous, month)
-    now, before = totals.get(month), totals.get(previous)
-    budgets = _budgets(db, user)
-    categories = (now or {}).get("categories", {})
-    names = sorted(set(categories) | set(budgets), key=lambda n: -categories.get(n, 0.0))
+    first = _shift_month(month, -(TILE_MONTHS - 1))
+    totals = _totals(db, user, first, month)
+    now = totals.get(month, {})
     has_entries = db.query(BudgetEntry.id).filter(BudgetEntry.user_id == user.id).first() is not None
     return {
         "month": month,
         "has_entries": has_entries,
         "currency": settings["currency"].strip(),
-        "income": round((now or {}).get("income", 0.0), 2),
-        "expenses": round((now or {}).get("expenses", 0.0), 2),
-        "last_month_expenses": round(before["expenses"], 2) if before else None,
-        "budget_total": round(sum(budgets.values()), 2) if budgets else None,
-        "categories": [
-            {"category": n, "spent": round(categories.get(n, 0.0), 2), "budget": budgets.get(n)}
-            for n in names[:TOP_CATEGORIES]
+        "income": round(now.get("income", 0.0), 2),
+        "expenses": round(now.get("expenses", 0.0), 2),
+        # Income vs spending per month, oldest first (the tile's column chart)
+        "history": [
+            {"month": m, "income": round(totals.get(m, {}).get("income", 0.0), 2),
+             "expenses": round(totals.get(m, {}).get("expenses", 0.0), 2)}
+            for m in (_shift_month(first, i) for i in range(TILE_MONTHS))
         ],
-        "more_categories": max(0, len(names) - TOP_CATEGORIES),
         "paths": _paths(db, user),
     }
 

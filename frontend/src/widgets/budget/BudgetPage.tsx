@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { budgetApi, localDate, type BudgetEntry, type BudgetMonth } from '../../api'
 import { Dialog } from '../../components/Dialog'
 import { EntryDialog } from './EntryDialog'
+import { MonthChart } from './MonthChart'
 import { buildTree, formatMoney, isIncome, monthTitle, shiftMonth, type TreeNode } from './budgetUtils'
 import './budget.css'
 
@@ -344,22 +345,10 @@ function Budgets({ data, money, onSaved }: { data: BudgetMonth; money: Money; on
 }
 
 function History({ data, money, onPick, thisMonth }: { data: BudgetMonth; money: Money; onPick: (m: string) => void; thisMonth: string }) {
-  const max = Math.max(1, ...data.history.flatMap((h) => [h.income, h.expenses]))
   return (
     <div className="card budget-card">
       <h3>Last 12 months</h3>
-      <div className="budget-history">
-        {data.history.map((h) => (
-          <button key={h.month} className={h.month === data.month ? 'current' : ''} onClick={() => onPick(h.month)}
-            disabled={h.month > thisMonth} title={`${monthTitle(h.month)}: income ${money(h.income)}, spent ${money(h.expenses)}`}>
-            <span className="budget-history-bars">
-              <span className="budget-history-income" style={{ height: `${(h.income / max) * 100}%` }} />
-              <span className="budget-history-expenses" style={{ height: `${(h.expenses / max) * 100}%` }} />
-            </span>
-            <span className="budget-history-label">{new Date(h.month + '-01T12:00').toLocaleDateString([], { month: 'short' })}</span>
-          </button>
-        ))}
-      </div>
+      <MonthChart history={data.history} current={data.month} lastMonth={thisMonth} money={money} onPick={onPick} />
       <div className="budget-legend"><span><i className="budget-history-income" />Income</span><span><i className="budget-history-expenses" />Spent</span><span>Tap a month to open it</span></div>
     </div>
   )
