@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { budgetApi, localDate, type BudgetEntry, type BudgetMonth } from '../../api'
 import { Dialog } from '../../components/Dialog'
-import { EntryDialog, buildTree, formatMoney, isIncome, monthTitle, shiftMonth, type TreeNode } from './shared'
+import { EntryDialog } from './EntryDialog'
+import { buildTree, formatMoney, isIncome, monthTitle, shiftMonth, type TreeNode } from './budgetUtils'
 import './budget.css'
 
 type Editing =

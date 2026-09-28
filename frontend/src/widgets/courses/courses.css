@@ -4,7 +4,6 @@
   margin: 0 0 6px; font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
   display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
 }
-.courses-folder { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--accent); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .courses-deadlines, .courses-files { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .courses-deadlines li { display: grid; grid-template-columns: 6.8em 1fr; gap: 10px; padding: 6px 0; font-size: 13px; }
 .courses-deadlines li + li, .courses-files li + li { border-top: 1px solid var(--border); }
@@ -20,3 +19,38 @@
 .course-file-name { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .course-file-error { flex-basis: 100%; margin: 0; }
 .courses-note { margin: 0 0 6px; color: var(--accent); }
+.courses-setup { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.courses-setup p { margin: 0; font-size: 14px; line-height: 1.5; }
+.courses-reading { margin: 0 0 6px; color: var(--accent); }
+.link-button { border: 0; background: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
+.courses-choose { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12px; }
+
+/* File picker */
+.picker { display: flex; flex-direction: column; gap: 10px; }
+.picker-tabs { margin-bottom: 0; }
+.picker-search { display: flex; gap: 8px; }
+.picker-search input {
+  flex: 1; min-width: 0; height: 34px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font: inherit; font-size: 14px;
+}
+.picker-trail { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.picker-trail b { color: var(--text); }
+.picker-list {
+  list-style: none; margin: 0; padding: 4px; border: 1px solid var(--border); border-radius: 10px;
+  max-height: 46vh; overflow-y: auto; display: flex; flex-direction: column;
+}
+.picker-list > li { padding: 0; }
+.picker-list > li.muted, .picker-list > li.error-text { padding: 8px; }
+.picker-folder, .picker-file {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; border-radius: 8px;
+  border: 0; background: none; color: inherit; font: inherit; font-size: 14px; text-align: left; cursor: pointer;
+}
+.picker-folder:hover, .picker-file:hover { background: var(--surface-2); }
+.picker-folder > span:nth-child(2) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-file input { width: 16px; height: 16px; accent-color: var(--accent); flex: none; }
+.picker-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-chosen { font-size: 13px; }
+.picker-chosen summary { cursor: pointer; font-weight: 600; }
+.picker-chosen ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.picker-chosen li { display: flex; align-items: center; gap: 6px; }
+.picker-chosen .icon-button { width: 26px; height: 26px; font-size: 12px; }

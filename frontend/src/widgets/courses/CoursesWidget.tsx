@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { coursesApi, localDate, shiftDay, type CourseFileText } from '../../api'
-import { GoogleSetup, LinkSetup } from '../../components/GoogleSetup'
+import { GoogleSetup } from '../../components/GoogleSetup'
 import type { WidgetProps } from '../types'
+import { FilePicker } from './FilePicker'
 import './courses.css'
 
 type CourseFile = {
@@ -11,13 +12,22 @@ type CourseFile = {
   kind: 'doc' | 'pdf'
   modified: string | null
   link: string | null
-  readable: boolean
+  readable: boolean | null // null: not read yet
 }
 type Deadline = { date: string; text: string; file: string; course: string; link: string | null }
 
 export type CoursesData =
-  | { needs_setup: 'no_file' | 'bad_link' | 'permission' | 'api_disabled' }
-  | { needs_setup: null; folder: string; folder_link: string; days: number; files: CourseFile[]; deadlines: Deadline[] }
+  | { needs_setup: 'no_file' | 'permission' | 'api_disabled' }
+  | {
+      needs_setup: null
+      days: number
+      files: CourseFile[]
+      deadlines: Deadline[]
+      missing: string[] // picked files that were deleted or can't be opened
+      reading: { done: number; total: number } | null // files still being read in the background
+    }
+
+const READING_REFRESH_MS = 5000
 
 // "Summarize with Claude": first load the file's text, then one click copies it and
 // opens claude.ai (copying needs a fresh click, so it can't happen after the download)
@@ -49,21 +59,30 @@ function summaryPrompt(file: CourseFileText): string {
   return `Summarize this course file, "${file.name}"${file.course ? ` (${file.course})` : ''}: the main points, what I should know for the exam, and any deadlines. I'm pasting its text below.\n\n`
 }
 
-export function CoursesWidget({ data, updateSettings }: WidgetProps<CoursesData>) {
+export function CoursesWidget({ data, reload }: WidgetProps<CoursesData>) {
   const [summary, setSummary] = useState<Summary | null>(null)
   const [note, setNote] = useState<string | null>(null)
+  const [picking, setPicking] = useState(false)
+
+  // While files are read in the background, refresh to show progress and new deadlines
+  const reading = data.needs_setup === null && data.reading !== null
+  useEffect(() => {
+    if (!reading) return
+    const timer = setTimeout(reload, READING_REFRESH_MS)
+    return () => clearTimeout(timer)
+  }, [reading, data, reload])
 
   if (data.needs_setup === 'permission' || data.needs_setup === 'api_disabled') {
     return <GoogleSetup reason={data.needs_setup} service="Google Drive" api="drive.googleapis.com" />
   }
+  const picker = picking && <FilePicker onSaved={reload} onClose={() => setPicking(false)} />
   if (data.needs_setup) {
     return (
-      <LinkSetup
-        prompt="Paste the link to the Google Drive folder with your course files (Google Docs and PDFs; subfolders per course are fine)."
-        placeholder="https://drive.google.com/drive/folders/…"
-        invalid={data.needs_setup === 'bad_link'}
-        onSave={(folder) => updateSettings({ folder })}
-      />
+      <div className="courses-setup">
+        <p>Pick the course files (Google Docs and PDFs) from your Drive that this widget should read for deadlines and summaries.</p>
+        <button className="button primary" onClick={() => setPicking(true)}>Choose files</button>
+        {picker}
+      </div>
     )
   }
 
@@ -92,8 +111,13 @@ export function CoursesWidget({ data, updateSettings }: WidgetProps<CoursesData>
     <div className="courses-widget">
       <section>
         <h4 className="courses-heading">Upcoming deadlines</h4>
+        {data.reading && (
+          <p className="small courses-reading">
+            Reading your files… {data.reading.done} of {data.reading.total} done. Deadlines appear as each file is read.
+          </p>
+        )}
         {data.deadlines.length === 0 ? (
-          <p className="muted small">None found in the next {data.days} days.</p>
+          !data.reading && <p className="muted small">None found in the next {data.days} days.</p>
         ) : (
           <ul className="courses-deadlines">
             {data.deadlines.map((d) => {
@@ -119,11 +143,16 @@ export function CoursesWidget({ data, updateSettings }: WidgetProps<CoursesData>
 
       <section>
         <h4 className="courses-heading">
-          Files <a className="courses-folder" href={data.folder_link} target="_blank" rel="noopener noreferrer">{data.folder} ↗</a>
+          Files <button className="link-button courses-choose" onClick={() => setPicking(true)}>Choose files</button>
         </h4>
         {note && <p className="small courses-note">{note}</p>}
+        {data.missing.length > 0 && (
+          <p className="small error-text">
+            Can't open {data.missing.join(', ')} any more (deleted or no longer shared). Choose files to update the list.
+          </p>
+        )}
         {data.files.length === 0 ? (
-          <p className="muted small">No Google Docs or PDFs in this folder yet.</p>
+          <p className="muted small">No files picked.</p>
         ) : (
           <ul className="courses-files">
             {data.files.map((f) => {
@@ -134,7 +163,9 @@ export function CoursesWidget({ data, updateSettings }: WidgetProps<CoursesData>
                     <span className="course-file-name">{f.kind === 'pdf' ? '📄' : '📝'} {f.name}</span>
                     <span className="muted small">{[f.course, updated(f.modified)].filter(Boolean).join(' · ')}</span>
                   </a>
-                  {!f.readable ? (
+                  {f.readable === null ? (
+                    <span className="muted small">reading…</span>
+                  ) : !f.readable ? (
                     <span className="muted small" title="No text could be read (a scanned PDF, or too large)">no text</span>
                   ) : mine?.state === 'ready' ? (
                     <button className="button primary small-button" onClick={() => openClaude(mine.file)}>Copy &amp; open Claude ↗</button>
@@ -150,6 +181,7 @@ export function CoursesWidget({ data, updateSettings }: WidgetProps<CoursesData>
           </ul>
         )}
       </section>
+      {picker}
     </div>
   )
 }

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { budgetApi } from '../../api'
 import type { WidgetProps } from '../types'
-import { EntryDialog, formatMoney, monthTitle } from './shared'
+import { EntryDialog } from './EntryDialog'
+import { formatMoney, monthTitle } from './budgetUtils'
 import './budget.css'
 
 export type BudgetData = {
