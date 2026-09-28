@@ -34,8 +34,14 @@ def _load() -> None:
     parts = _sections(PROMPT_FILE.read_text(encoding="utf-8"))
     suggestions = [line[2:].strip() for line in parts.get("suggestions", "").splitlines()
                    if line.startswith("- ") and line[2:].strip()]
+    instructions = parts.get("instructions") or PROMPT_DEFAULTS["instructions"]
+    extras = _extra_instructions(parts.get("extra instructions", ""))
+    if extras:
+        instructions += "\n\nIn your answer, also include (only where it fits my question):\n" + "\n".join(
+            f"- {name}: {text}" for name, text in extras
+        )
     _prompt_cache.update(mtime=mtime, briefing=_briefing_rules(parts.get("briefing", "")), prompt={
-        "instructions": parts.get("instructions") or PROMPT_DEFAULTS["instructions"],
+        "instructions": instructions,
         "default_question": parts.get("default question") or PROMPT_DEFAULTS["default question"],
         "suggestions": suggestions,
     })
@@ -54,6 +60,20 @@ def load_briefing_rules() -> dict[str, object]:
     section. Widgets not listed are included with their default limit."""
     _load()
     return _prompt_cache["briefing"]
+
+
+def _extra_instructions(text: str) -> list[tuple[str, str]]:
+    """[(name, instruction)] for the ticked "- [x] Name: instruction" lines; unticked
+    "- [ ]" lines are switched off."""
+    extras = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line.lower().startswith("- [x]"):
+            continue
+        name, _, instruction = line[5:].partition(":")
+        if name.strip() and instruction.strip():
+            extras.append((name.strip(), instruction.strip()))
+    return extras
 
 
 def _briefing_rules(text: str) -> dict[str, object]:
