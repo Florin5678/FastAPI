@@ -1,6 +1,7 @@
 # Weather widget: today's weather from Open-Meteo (https://open-meteo.com).
 # Free for non-commercial use, no API key. Free-tier cap: 10,000 calls/day, so
 # responses are cached per city for 10 minutes (this app makes a few dozen a day).
+import logging
 import time
 
 import requests
@@ -12,6 +13,10 @@ from app.widgets.registry import ConfigField, WidgetContext, WidgetDefinition, r
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 CACHE_SECONDS = 600
+STALE_SECONDS = 6 * 3600  # if Open-Meteo fails, keep showing the last forecast this long
+# Identify the app (some APIs turn away anonymous requests from shared cloud IPs)
+USER_AGENT = "PersonalDashboard/1.0 (https://github.com/Florin5678/FastAPI; personal non-commercial dashboard)"
+logger = logging.getLogger(__name__)
 
 CITIES = {
     "Aarhus": {"latitude": 56.1567, "longitude": 10.2108, "country": "Denmark"},
@@ -76,17 +81,33 @@ def _forecast(city: str) -> dict:
                 "timezone": "auto",  # times come back in the city's local time
                 "forecast_days": 2,  # tomorrow's early hours keep the hourly strip full late in the day
             },
+            headers={"User-Agent": USER_AGENT},
             timeout=15,
         )
         response.raise_for_status()
-    except requests.RequestException:
-        if cached:
+    except requests.RequestException as e:
+        reason = _failure_reason(e)
+        logger.warning("Open-Meteo request for %s failed: %s", city, reason)
+        if cached and time.time() - cached[0] < STALE_SECONDS:
             return cached[1]  # stale beats nothing
-        raise HTTPException(status_code=502, detail="The weather service didn't respond. Try again in a minute.") from None
+        raise HTTPException(status_code=502, detail=f"The weather service didn't respond ({reason}). Try again in a minute.") from None
 
     data = response.json()
     _cache[city] = (time.time(), data)
     return data
+
+
+def _failure_reason(e: requests.RequestException) -> str:
+    """A short reason for the error message, e.g. "HTTP 429: Daily API request limit exceeded"."""
+    response = getattr(e, "response", None)
+    if response is None:
+        return type(e).__name__  # e.g. ConnectTimeout, ConnectionError
+    detail = ""
+    try:
+        detail = str(response.json().get("reason") or "")
+    except ValueError:
+        detail = response.text[:120]
+    return f"HTTP {response.status_code}" + (f": {detail}" if detail else "")
 
 
 def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:

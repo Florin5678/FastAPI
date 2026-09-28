@@ -167,8 +167,9 @@ register(WidgetDefinition(
     description="Latest headlines on AI, tech, science, world, European and Romanian news from public RSS feeds.",
     fetch=fetch,
     brief=brief,
-    default_size=(8, 8),
-    min_size=(4, 6),
+    default_size=(4, 9),
+    min_size=(3, 6),
+    layout_version=2,  # v2: half width (8x8 -> 4x9, like Weather)
     refresh_seconds=900,
     enabled_by_default=True,
     config_fields=(
