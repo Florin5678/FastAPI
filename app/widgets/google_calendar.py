@@ -107,13 +107,13 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     }
 
 
-def brief(data: dict) -> str:
+def brief(data: dict, limit: int | None = None) -> str:
     if data["needs_setup"]:
         return "Calendar not connected yet."
     if not data["events"]:
         return f"No events in the next {data['days']} day(s)."
     lines = [f"Upcoming events (next {data['days']} days):"]
-    for e in data["events"][:12]:
+    for e in data["events"][:limit or 12]:
         when = f"{e['start']} (all day)" if e["all_day"] else e["start"]
         lines.append(f"- {when}: {e['title']}" + (f" at {e['location']}" if e["location"] else ""))
     return "\n".join(lines)

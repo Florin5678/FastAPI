@@ -67,12 +67,12 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     return {"reminders": open_, "done": done, "notes": notes}
 
 
-def brief(data: dict) -> str:
+def brief(data: dict, limit: int | None = None) -> str:
     if not data["reminders"]:
         lines = ["No open reminders."]
     else:
         lines = ["Open reminders:"]
-        for r in data["reminders"][:10]:
+        for r in data["reminders"][:limit or 10]:
             lines.append(f"- {r['text']}" + (f" (due {r['due']})" if r["due"] else ""))
     lines.append(f"{len(data['notes'])} note(s).")
     return "\n".join(lines)

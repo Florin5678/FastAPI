@@ -49,12 +49,12 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     }
 
 
-def brief(data: dict) -> str:
+def brief(data: dict, limit: int | None = None) -> str:
     lines = [f"{data['today_total']} email(s) today."]
     counts = ", ".join(f"{c['category']} {c['count']}" for c in data["categories"] if c["category"] != "unsummarized")
     if counts:
         lines.append(f"By category: {counts}.")
-    for e in data["latest"][:5]:
+    for e in data["latest"][:limit or 5]:
         lines.append(f"- {e['sender'] or 'Unknown'}: {e['subject'] or '(no subject)'}" + (f" ({e['summary']})" if e["summary"] else ""))
     return "\n".join(lines)
 

@@ -132,7 +132,7 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     }
 
 
-def brief(data: dict) -> str:
+def brief(data: dict, limit: int | None = None) -> str:
     now, today = data["current"], data["today"]
     return (
         f"{data['city']}: {now['temperature']}°C, {now['weather']['label'].lower()} "

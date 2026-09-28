@@ -89,7 +89,7 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     }
 
 
-def brief(data: dict) -> str:
+def brief(data: dict, limit: int | None = None) -> str:
     return (
         f"{data['language']}: {data['due']} review(s) due, {data['new_left']} new word(s) left today, "
         f"{data['learned']} of {data['total']} words learned."

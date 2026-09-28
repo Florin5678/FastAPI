@@ -155,9 +155,9 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     }
 
 
-def brief(data: dict) -> str:
+def brief(data: dict, limit: int | None = None) -> str:
     lines = [f"Latest {data['topic']} headlines:"]
-    lines += [f"- {i['title']} ({i['source']})" for i in data["items"][:6]]
+    lines += [f"- {i['title']} ({i['source']})" for i in data["items"][:limit or 6]]
     return "\n".join(lines)
 
 

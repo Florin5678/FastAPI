@@ -24,24 +24,50 @@ PROMPT_DEFAULTS = {
     "default question": "Give me a short overview of my day and three practical suggestions.",
     "suggestions": [],
 }
-_prompt_cache: dict = {"mtime": None, "prompt": PROMPT_DEFAULTS}
+_prompt_cache: dict = {"mtime": None, "prompt": PROMPT_DEFAULTS, "briefing": {}}
+
+
+def _load() -> None:
+    mtime = PROMPT_FILE.stat().st_mtime
+    if _prompt_cache["mtime"] == mtime:
+        return
+    parts = _sections(PROMPT_FILE.read_text(encoding="utf-8"))
+    suggestions = [line[2:].strip() for line in parts.get("suggestions", "").splitlines()
+                   if line.startswith("- ") and line[2:].strip()]
+    _prompt_cache.update(mtime=mtime, briefing=_briefing_rules(parts.get("briefing", "")), prompt={
+        "instructions": parts.get("instructions") or PROMPT_DEFAULTS["instructions"],
+        "default_question": parts.get("default question") or PROMPT_DEFAULTS["default question"],
+        "suggestions": suggestions,
+    })
 
 
 def load_prompt() -> dict:
     """{"instructions", "default_question", "suggestions"} from the "## " sections of
     content/assistant_prompt.md, re-read when the file changes. Missing sections fall
     back to the defaults above."""
-    mtime = PROMPT_FILE.stat().st_mtime
-    if _prompt_cache["mtime"] != mtime:
-        parts = _sections(PROMPT_FILE.read_text(encoding="utf-8"))
-        suggestions = [line[2:].strip() for line in parts.get("suggestions", "").splitlines()
-                       if line.startswith("- ") and line[2:].strip()]
-        _prompt_cache.update(mtime=mtime, prompt={
-            "instructions": parts.get("instructions") or PROMPT_DEFAULTS["instructions"],
-            "default_question": parts.get("default question") or PROMPT_DEFAULTS["default question"],
-            "suggestions": suggestions,
-        })
+    _load()
     return _prompt_cache["prompt"]
+
+
+def load_briefing_rules() -> dict[str, object]:
+    """{"widget name or id in lowercase": "off" | "on" | max items} from the "## Briefing"
+    section. Widgets not listed are included with their default limit."""
+    _load()
+    return _prompt_cache["briefing"]
+
+
+def _briefing_rules(text: str) -> dict[str, object]:
+    rules: dict[str, object] = {}
+    for line in text.splitlines():
+        if not line.startswith("- ") or ":" not in line:
+            continue
+        name, _, value = line[2:].rpartition(":")
+        value = value.strip().lower()
+        if value in ("on", "off"):
+            rules[name.strip().lower()] = value
+        elif value.isdigit() and int(value) > 0:
+            rules[name.strip().lower()] = int(value)
+    return rules
 
 
 def _sections(markdown: str) -> dict[str, str]:
@@ -64,14 +90,22 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
         .all()
     )
     active = {row.app_name: row for row in rows}
+    rules = load_briefing_rules()
 
     sections = []
     for definition in REGISTRY.values():  # registry order = a stable, sensible order
         row = active.get(definition.id)
         if row is None or definition.brief is None or definition.id == WIDGET_ID:
             continue
+        rule = rules.get(definition.name.lower(), rules.get(definition.id))
+        if rule == "off":
+            continue
+        limit = rule if isinstance(rule, int) else None
+        settings = definition.settings_for(row)
+        if limit and "max_items" in settings:
+            settings = {**settings, "max_items": limit}  # fetch enough items for the briefing
         try:
-            text = definition.brief(definition.fetch(db, user, definition.settings_for(row), ctx))
+            text = definition.brief(definition.fetch(db, user, settings, ctx), limit)
         except Exception:
             logger.warning("Briefing: %s widget failed", definition.id, exc_info=True)
             text = "(couldn't load right now)"

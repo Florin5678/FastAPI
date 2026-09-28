@@ -52,8 +52,10 @@ class WidgetContext:
 
 # (db, user, settings, ctx) -> widget-specific JSON-able data
 FetchFn = Callable[[Session, User, dict, WidgetContext], dict]
-# data returned by fetch -> a few plain-text lines for the Assistant's daily briefing
-BriefFn = Callable[[dict], str]
+# (data returned by fetch, max items or None for the widget's default) -> a few
+# plain-text lines for the Assistant's daily briefing. Widgets without a list ignore
+# the limit. Limits come from the "## Briefing" section of content/assistant_prompt.md.
+BriefFn = Callable[[dict, Optional[int]], str]
 
 
 @dataclass(frozen=True)

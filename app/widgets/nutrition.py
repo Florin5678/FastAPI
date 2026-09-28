@@ -114,10 +114,10 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     return day_summary(db, user, local_today(ctx.tz))
 
 
-def brief(data: dict) -> str:
+def brief(data: dict, limit: int | None = None) -> str:
     parts = [f"{n['label']} {round(n['actual'])}/{round(n['goal'])} {n['unit']}" + (" (limit)" if n["kind"] == "limit" else "")
              for n in data["nutrients"]]
-    foods = ", ".join(e["name"] for e in data["entries"][:8]) or "nothing logged yet"
+    foods = ", ".join(e["name"] for e in data["entries"][:limit or 8]) or "nothing logged yet"
     return f"Today's intake vs goals: {'; '.join(parts)}. Foods: {foods}."
 
 

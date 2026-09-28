@@ -106,7 +106,7 @@ def _week_count(db: Session, user: User, week: date) -> int:
     )
 
 
-def brief(data: dict) -> str:
+def brief(data: dict, limit: int | None = None) -> str:
     line = (
         f"This week: {data['workouts_done']} of {data['goal_workouts']} workouts, "
         f"{data['minutes_done']} of {data['goal_minutes']} minutes."
