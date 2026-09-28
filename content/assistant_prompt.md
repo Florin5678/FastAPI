@@ -1,7 +1,11 @@
-# Assistant prompt
+# Assistant prompt (starting values)
+
+**Edit the prompt in the Assistant widget: click ⚙ on the tile.** This file only
+provides the starting values until you save the settings there the first time;
+after that, changes here have no effect.
 
 What the Assistant widget sends to Claude together with your daily briefing.
-Edit the text under each heading (keep the four `## ` headings as they are).
+Keep the four `## ` headings as they are.
 `{when}` is replaced with the current day and time. "Default question" is what
 the "Brief me" button asks Claude, after the briefing.
 
