@@ -19,6 +19,5 @@ from app.widgets import (  # noqa: F401
     gym,
     language,
     budget,
-    courses,
     assistant,
 )

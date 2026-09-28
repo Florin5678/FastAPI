@@ -1,4 +1,4 @@
-# Shared helper for calling Google APIs (Calendar, Drive, Sheets) with the user's token.
+# Shared helper for calling Google APIs (currently Calendar) with the user's token.
 # Missing permissions / a switched-off API become NeedsSetup, which widgets turn into
 # a "connect" or "turn it on" message instead of an error.
 from typing import Optional

@@ -23,13 +23,11 @@ AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
-# Read-only Gmail + Calendar + Drive (Drive also covers reading Sheets). Adding a scope
-# here means signing in again once to grant it (and, for a new Google API, enabling
-# that API in Google Cloud Console).
+# Read-only Gmail + Calendar. Adding a scope here means signing in again once to grant
+# it (and, for a new Google API, enabling that API in Google Cloud Console).
 SCOPE = " ".join([
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/calendar.readonly",
-    "https://www.googleapis.com/auth/drive.readonly",
     "email",
     "profile",
 ])
