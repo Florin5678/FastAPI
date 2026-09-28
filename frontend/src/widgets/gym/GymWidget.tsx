@@ -36,7 +36,7 @@ function GoalBar({ label, done, goal, unit }: { label: string; done: number; goa
   )
 }
 
-export function GymWidget({ data, reload }: WidgetProps<GymData>) {
+export function GymWidget({ data, reload, actions }: WidgetProps<GymData>) {
   const [logging, setLogging] = useState(false)
   const [kind, setKind] = useState(data.kinds[0])
   const [minutes, setMinutes] = useState('60')
@@ -147,6 +147,8 @@ export function GymWidget({ data, reload }: WidgetProps<GymData>) {
           ))}
         </ul>
       )}
+
+      <button className="link gym-open" onClick={() => actions.goTo('gym')}>Open monthly report →</button>
     </div>
   )
 }

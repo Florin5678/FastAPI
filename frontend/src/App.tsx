@@ -8,9 +8,10 @@ import { Dashboard } from './components/Dashboard'
 import { IntroHeader } from './components/IntroHeader'
 import { NutritionPage } from './widgets/nutrition/NutritionPage'
 import { JournalPage } from './widgets/journal/JournalPage'
+import { GymPage } from './widgets/gym/GymPage'
 import type { DashboardActions } from './widgets/types'
 
-type Tab = 'home' | 'today' | 'inbox' | 'nutrition' | 'journal'
+type Tab = 'home' | 'today' | 'inbox' | 'nutrition' | 'journal' | 'gym'
 
 function firstName(me: Me): string {
   return (me.name || me.email).split(/[\s@]/)[0]
@@ -126,6 +127,7 @@ export default function App() {
         {tab === 'today' && <Digest refreshKey={refreshKey} onOpen={setOpenEmailId} />}
         {tab === 'nutrition' && <NutritionPage />}
         {tab === 'journal' && <JournalPage />}
+        {tab === 'gym' && <GymPage />}
         {tab === 'inbox' && (
           <Inbox key={inboxCategory ?? 'all'} initialCategory={inboxCategory} refreshKey={refreshKey} onOpen={setOpenEmailId} />
         )}
