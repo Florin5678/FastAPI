@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, Date, Float, ForeignKey, JSON, UniqueConstraint, Index
+    Column, Integer, String, Text, DateTime, Date, Float, ForeignKey, JSON, UniqueConstraint, Index, Numeric
 )
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -172,3 +172,23 @@ class VocabCard(Base):
     lapses = Column(Integer, nullable=False, default=0)
     introduced_on = Column(Date, nullable=False)  # first seen (limits new words per day)
     last_reviewed_at = Column(DateTime, nullable=True)
+
+
+class BudgetEntry(Base):
+    """One amount in the Budget widget's log: a month, a category path of up to four
+    levels (e.g. Expenses > Transport > Plane tickets > Dubai - Copenhagen) and an
+    amount in the user's currency. Category "Income" is income; anything else counts
+    as spending."""
+    __tablename__ = "budget_entries"
+    __table_args__ = (Index("ix_budget_entries_user_month", "user_id", "month"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    month = Column(String(7), nullable=False)  # "YYYY-MM"
+    category = Column(String(120), nullable=False)
+    sub1 = Column(String(120), nullable=True)
+    sub2 = Column(String(120), nullable=True)
+    sub3 = Column(String(120), nullable=True)
+    amount = Column(Numeric(12, 2), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

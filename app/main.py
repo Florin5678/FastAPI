@@ -13,6 +13,7 @@ from app.auth.account import router as account_router
 from app.auth.google_oauth import router as google_router
 from app.mail.gmail_routes import router as gmail_router
 from app.mail.routes import router as mail_router
+from app.widgets.budget import router as budget_router
 from app.widgets.courses import router as courses_router
 from app.widgets.gym import router as gym_router
 from app.widgets.journal import router as journal_router
@@ -79,6 +80,7 @@ app.include_router(notes_router)  # Notes & reminders widget
 app.include_router(journal_router)  # Journal widget: entries, prompts, locked history
 app.include_router(gym_router)  # Gym widget: log / delete workouts
 app.include_router(language_router)  # Language widget: flashcard reviews
+app.include_router(budget_router)  # Budget widget: entries, monthly report, CSV import/export
 app.include_router(courses_router)  # Courses widget: file text for "Summarize with Claude"
 
 # The React frontend (built into frontend/dist) is served from everything else

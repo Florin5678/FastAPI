@@ -1,67 +1,341 @@
-# Budget widget: this month's spending vs budget, from a Google Sheet of transactions.
-# Read-only (drive.readonly scope, which also covers the Sheets API). The sheet has one
-# row per transaction (date, amount, category columns, names set in the widget's
-# settings) and optionally a budget tab with a monthly budget per category.
+# Budget widget: a monthly money log kept in the dashboard's own database
+# (budget_entries): each entry is a month, a category path of up to four levels
+# (Income > SU, Expenses > Transport > Plane tickets > Dubai - Copenhagen) and an
+# amount. Everything is editable from the widget and its monthly report page;
+# existing logs come in once through a CSV import (e.g. a Google Sheet downloaded as
+# .csv). Monthly budgets per spending category live in the widget's config.
 # Not part of the Assistant briefing (no brief()), on purpose: money stays out of it.
+import csv
+import io
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any, Optional
 
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
+from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.auth.google_tokens import get_valid_access_token
-from app.core.google_api import NeedsSetup, google_get
+from app.core.database import get_db
+from app.core.security import get_current_user
 from app.core.timeutil import local_today
-from app.models import User
-from app.widgets.registry import ConfigField, WidgetContext, WidgetDefinition, register
+from app.models import BudgetEntry, User
+from app.widgets.registry import ConfigField, WidgetContext, WidgetDefinition, register, widget_row
 
 WIDGET_ID = "budget"
-API = "https://sheets.googleapis.com/v4/spreadsheets"
-HEADER_SEARCH_ROWS = 10  # the header row may sit below a title
-SHEETS_EPOCH = date(1899, 12, 30)  # Google Sheets date serial number 0
-DATE_FORMATS = ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d.%m.%Y", "%d/%m/%y", "%d.%m.%y", "%d-%m-%y")
+INCOME = "income"  # the top-level category that counts as income (case-insensitive)
+LEVELS = 4
+MAX_ENTRIES = 20_000
+MAX_IMPORT_BYTES = 2 * 1024 * 1024
+HISTORY_MONTHS = 12
+TOP_CATEGORIES = 6
+MONTH_RE = r"^\d{4}-(0[1-9]|1[0-2])$"
+CSV_HEADER = ["Month", "Category", "Sub-category", "Sub-sub-category", "Sub-sub-sub-category", "Amount"]
 
 
-def spreadsheet_id(link: str) -> Optional[str]:
-    """The id from a Google Sheets link (or a bare id)."""
-    link = link.strip()
-    match = re.search(r"/d/([A-Za-z0-9_-]{20,})", link)
-    if match:
-        return match.group(1)
-    return link if re.fullmatch(r"[A-Za-z0-9_-]{20,}", link) else None
+# ---- Helpers ----
+
+def _path(e: BudgetEntry) -> list[str]:
+    return [p for p in (e.category, e.sub1, e.sub2, e.sub3) if p]
 
 
-def _date(value: Any) -> Optional[date]:
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return SHEETS_EPOCH + timedelta(days=int(value))  # a real date cell (serial number)
-    if isinstance(value, str) and value.strip():
-        text = value.strip().split(" ")[0].split("T")[0]
-        for fmt in DATE_FORMATS:
-            try:
-                return datetime.strptime(text, fmt).date()
-            except ValueError:
-                continue
-    return None
+def _entry_dict(e: BudgetEntry) -> dict:
+    return {"id": e.id, "month": e.month, "path": _path(e), "amount": float(e.amount)}
 
+
+def _is_income(category: str) -> bool:
+    return category.strip().lower() == INCOME
+
+
+def _clean_path(path: list[str]) -> list[str]:
+    """Trimmed levels without trailing blanks; a blank level in the middle is an error."""
+    levels = [p.strip() for p in path]
+    while levels and not levels[-1]:
+        levels.pop()
+    if not levels or len(levels) > LEVELS or any(not p for p in levels):
+        raise HTTPException(status_code=422, detail="A category path needs 1 to 4 levels without gaps")
+    if any(len(p) > 120 for p in levels):
+        raise HTTPException(status_code=422, detail="Category names can be at most 120 characters")
+    return levels
+
+
+def _set_path(e: BudgetEntry, path: list[str]) -> None:
+    padded = path + [None] * (LEVELS - len(path))
+    e.category, e.sub1, e.sub2, e.sub3 = padded
+
+
+def _shift_month(month: str, delta: int) -> str:
+    y, m = int(month[:4]), int(month[5:7])
+    index = y * 12 + (m - 1) + delta
+    return f"{index // 12:04d}-{index % 12 + 1:02d}"
+
+
+def _budgets(db: Session, user: User) -> dict[str, float]:
+    return dict((widget_row(db, user, WIDGET_ID).config or {}).get("budgets") or {})
+
+
+def _totals(db: Session, user: User, first: str, last: str) -> dict[str, dict]:
+    """{month: {"income", "expenses", "categories": {spending category: total}}} for
+    months first..last. The spending category is the second level (Expenses > Rent)
+    or the top level when there is none."""
+    rows = (
+        db.query(BudgetEntry.month, BudgetEntry.category, BudgetEntry.sub1, func.sum(BudgetEntry.amount))
+        .filter(BudgetEntry.user_id == user.id, BudgetEntry.month >= first, BudgetEntry.month <= last)
+        .group_by(BudgetEntry.month, BudgetEntry.category, BudgetEntry.sub1)
+        .all()
+    )
+    out: dict[str, dict] = {}
+    for month, category, sub1, total in rows:
+        m = out.setdefault(month, {"income": 0.0, "expenses": 0.0, "categories": {}})
+        if _is_income(category):
+            m["income"] += float(total)
+        else:
+            m["expenses"] += float(total)
+            name = sub1 or category
+            m["categories"][name] = m["categories"].get(name, 0.0) + float(total)
+    return out
+
+
+def _month_or_400(month: str) -> str:
+    if not re.match(MONTH_RE, month or ""):
+        raise HTTPException(status_code=422, detail="Month must look like 2026-09")
+    return month
+
+
+def _paths(db: Session, user: User) -> list[list[str]]:
+    """Every distinct category path, for suggestions when adding entries."""
+    rows = (
+        db.query(BudgetEntry.category, BudgetEntry.sub1, BudgetEntry.sub2, BudgetEntry.sub3)
+        .filter(BudgetEntry.user_id == user.id)
+        .distinct()
+        .all()
+    )
+    return sorted(([p for p in r if p] for r in rows), key=lambda p: [s.lower() for s in p])
+
+
+# ---- Widget ----
+
+def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
+    month = local_today(ctx.tz).isoformat()[:7]
+    previous = _shift_month(month, -1)
+    totals = _totals(db, user, previous, month)
+    now, before = totals.get(month), totals.get(previous)
+    budgets = _budgets(db, user)
+    categories = (now or {}).get("categories", {})
+    names = sorted(set(categories) | set(budgets), key=lambda n: -categories.get(n, 0.0))
+    has_entries = db.query(BudgetEntry.id).filter(BudgetEntry.user_id == user.id).first() is not None
+    return {
+        "month": month,
+        "has_entries": has_entries,
+        "currency": settings["currency"].strip(),
+        "income": round((now or {}).get("income", 0.0), 2),
+        "expenses": round((now or {}).get("expenses", 0.0), 2),
+        "last_month_expenses": round(before["expenses"], 2) if before else None,
+        "budget_total": round(sum(budgets.values()), 2) if budgets else None,
+        "categories": [
+            {"category": n, "spent": round(categories.get(n, 0.0), 2), "budget": budgets.get(n)}
+            for n in names[:TOP_CATEGORIES]
+        ],
+        "more_categories": max(0, len(names) - TOP_CATEGORIES),
+        "paths": _paths(db, user),
+    }
+
+
+DEFINITION = register(WidgetDefinition(
+    id=WIDGET_ID,
+    name="Budget",
+    description="Log income and expenses by month and category, with budgets per category and a monthly report. Kept in the dashboard (import your existing log as CSV).",
+    fetch=fetch,
+    default_size=(4, 8),
+    min_size=(3, 5),
+    refresh_seconds=1800,
+    config_fields=(
+        ConfigField("currency", "Currency", "text", default="kr"),
+    ),
+))
+
+
+# ---- Routes used by the widget and its report page ----
+
+router = APIRouter(prefix=f"/widgets/{WIDGET_ID}", tags=["widgets"])
+
+
+class EntryIn(BaseModel):
+    month: str = Field(pattern=MONTH_RE)
+    path: list[str] = Field(min_length=1, max_length=LEVELS)
+    amount: float = Field(ge=-1e9, le=1e9)
+
+
+class EntryPatch(BaseModel):
+    month: Optional[str] = Field(None, pattern=MONTH_RE)
+    path: Optional[list[str]] = Field(None, min_length=1, max_length=LEVELS)
+    amount: Optional[float] = Field(None, ge=-1e9, le=1e9)
+
+
+class RenameIn(BaseModel):
+    path: list[str] = Field(min_length=1, max_length=LEVELS)  # the category to rename
+    name: str = Field(min_length=1, max_length=120)
+    month: Optional[str] = Field(None, pattern=MONTH_RE)  # None = every month
+
+
+class GroupIn(BaseModel):
+    path: list[str] = Field(min_length=1, max_length=LEVELS)
+    month: str = Field(pattern=MONTH_RE)
+
+
+class BudgetsIn(BaseModel):
+    budgets: dict[str, Optional[float]]  # spending category -> monthly budget (None/0 removes it)
+
+
+class ImportIn(BaseModel):
+    csv: str = Field(max_length=MAX_IMPORT_BYTES)
+    replace: bool = False  # delete every existing entry first
+
+
+def _under(query, user: User, path: list[str], month: Optional[str]):
+    """Entries whose category path starts with `path` (optionally in one month)."""
+    query = query.filter(BudgetEntry.user_id == user.id)
+    for column, name in zip((BudgetEntry.category, BudgetEntry.sub1, BudgetEntry.sub2, BudgetEntry.sub3), path, strict=False):
+        query = query.filter(column == name)
+    if month:
+        query = query.filter(BudgetEntry.month == month)
+    return query
+
+
+@router.get("/month")
+def month_report(month: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Everything the report page shows for one month: its entries, totals, the
+    previous month, budgets and the last 12 months."""
+    month = _month_or_400(month)
+    row = widget_row(db, user, WIDGET_ID)  # 404 unless the widget is on the dashboard
+    entries = (
+        db.query(BudgetEntry)
+        .filter(BudgetEntry.user_id == user.id, BudgetEntry.month == month)
+        .order_by(BudgetEntry.amount.desc())
+        .all()
+    )
+    first_history = _shift_month(month, -(HISTORY_MONTHS - 1))
+    totals = _totals(db, user, first_history, month)
+    previous = totals.get(_shift_month(month, -1))
+    first_month = db.query(func.min(BudgetEntry.month)).filter(BudgetEntry.user_id == user.id).scalar()
+    history = []
+    for i in range(HISTORY_MONTHS):
+        m = _shift_month(first_history, i)
+        t = totals.get(m, {"income": 0.0, "expenses": 0.0})
+        history.append({"month": m, "income": round(t["income"], 2), "expenses": round(t["expenses"], 2)})
+    now = totals.get(month, {"income": 0.0, "expenses": 0.0, "categories": {}})
+    return {
+        "month": month,
+        "currency": DEFINITION.settings_for(row)["currency"].strip(),
+        "entries": [_entry_dict(e) for e in entries],
+        "income": round(now["income"], 2),
+        "expenses": round(now["expenses"], 2),
+        "previous": {
+            "month": _shift_month(month, -1),
+            "income": round(previous["income"], 2) if previous else None,
+            "expenses": round(previous["expenses"], 2) if previous else None,
+            "categories": {k: round(v, 2) for k, v in (previous or {}).get("categories", {}).items()},
+        },
+        "budgets": _budgets(db, user),
+        "history": history,
+        "first_month": first_month,
+        "paths": _paths(db, user),
+    }
+
+
+@router.post("/entries")
+def add_entry(body: EntryIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    widget_row(db, user, WIDGET_ID)
+    if db.query(func.count(BudgetEntry.id)).filter(BudgetEntry.user_id == user.id).scalar() >= MAX_ENTRIES:
+        raise HTTPException(status_code=422, detail=f"You can keep up to {MAX_ENTRIES} entries")
+    entry = BudgetEntry(user_id=user.id, month=body.month, amount=Decimal(str(round(body.amount, 2))))
+    _set_path(entry, _clean_path(body.path))
+    db.add(entry)
+    db.commit()
+    return _entry_dict(entry)
+
+
+@router.patch("/entries/{entry_id}")
+def update_entry(entry_id: int, body: EntryPatch, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    entry = db.query(BudgetEntry).filter(BudgetEntry.id == entry_id, BudgetEntry.user_id == user.id).first()
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    if body.month is not None:
+        entry.month = body.month
+    if body.path is not None:
+        _set_path(entry, _clean_path(body.path))
+    if body.amount is not None:
+        entry.amount = Decimal(str(round(body.amount, 2)))
+    db.commit()
+    return _entry_dict(entry)
+
+
+@router.delete("/entries/{entry_id}")
+def delete_entry(entry_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    entry = db.query(BudgetEntry).filter(BudgetEntry.id == entry_id, BudgetEntry.user_id == user.id).first()
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    db.delete(entry)
+    db.commit()
+    return {"deleted": entry_id}
+
+
+@router.post("/rename")
+def rename_category(body: RenameIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Rename a category at any level, in one month or all months. Renaming to an
+    existing name merges the two."""
+    path = _clean_path(body.path)
+    column = (BudgetEntry.category, BudgetEntry.sub1, BudgetEntry.sub2, BudgetEntry.sub3)[len(path) - 1]
+    changed = _under(db.query(BudgetEntry), user, path, body.month).update(
+        {column: body.name.strip(), BudgetEntry.updated_at: datetime.utcnow()}, synchronize_session=False
+    )
+    if len(path) == 2 and not _is_income(path[0]) and body.month is None:
+        # Keep the budget of a renamed spending category
+        row = widget_row(db, user, WIDGET_ID)
+        budgets = dict((row.config or {}).get("budgets") or {})
+        if path[1] in budgets:
+            budgets[body.name.strip()] = budgets.pop(path[1])
+            row.config = {**(row.config or {}), "budgets": budgets}
+    db.commit()
+    return {"changed": changed}
+
+
+@router.post("/delete-group")
+def delete_group(body: GroupIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Delete a category and everything under it, in one month."""
+    deleted = _under(db.query(BudgetEntry), user, _clean_path(body.path), body.month).delete(synchronize_session=False)
+    db.commit()
+    return {"deleted": deleted}
+
+
+@router.put("/budgets")
+def set_budgets(body: BudgetsIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    budgets = {}
+    for name, amount in body.budgets.items():
+        if amount is not None and not 0 <= amount <= 1e9:
+            raise HTTPException(status_code=422, detail="Budgets must be positive numbers")
+        if name.strip() and amount:
+            budgets[name.strip()[:120]] = round(float(amount), 2)
+    row = widget_row(db, user, WIDGET_ID)
+    row.config = {**(row.config or {}), "budgets": budgets}
+    db.commit()
+    return {"budgets": budgets}
+
+
+# ---- CSV import / export ----
 
 def _amount(value: Any) -> Optional[float]:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if not isinstance(value, str):
-        return None
-    text = value.strip().replace("−", "-")
+    """12.50 / 12,50 / 1.234,56 / 1,234.56 / "kr 45" -> float."""
+    text = str(value).strip().replace("−", "-")
     negative = text.startswith("(") and text.endswith(")")
-    text = re.sub(r"[^0-9,.\-]", "", text)  # drop currency symbols, spaces
+    text = re.sub(r"[^0-9,.\-]", "", text)
     if not re.search(r"\d", text):
         return None
     if "," in text and "." in text:
-        # whichever comes last is the decimal separator: 1.234,56 or 1,234.56
         text = text.replace(".", "").replace(",", ".") if text.rfind(",") > text.rfind(".") else text.replace(",", "")
     elif "," in text:
-        # 12,50 (decimal) vs 1,250 (thousands)
         text = text.replace(",", ".") if len(text) - text.rfind(",") - 1 in (1, 2) else text.replace(",", "")
     try:
         number = float(text)
@@ -70,145 +344,89 @@ def _amount(value: Any) -> Optional[float]:
     return -abs(number) if negative else number
 
 
-def _header(rows: list[list], *names: str) -> Optional[tuple[int, dict[str, int]]]:
-    """(row index, {name: column}) of the first row containing all the column names."""
-    wanted = [n.strip().lower() for n in names]
-    for i, row in enumerate(rows[:HEADER_SEARCH_ROWS]):
-        cells = [str(c).strip().lower() for c in row]
-        if all(w in cells for w in wanted):
-            return i, {name: cells.index(w) for name, w in zip(names, wanted, strict=True)}
-    return None
-
-
-def _cell(row: list, col: int) -> Any:
-    return row[col] if col < len(row) else None
-
-
-def _tab_range(tab: str) -> str:
-    return "'" + tab.replace("'", "''") + "'"
-
-
-def _budgets(rows: list[list], category_col: str) -> dict[str, tuple[str, float]]:
-    """{category lowercase: (category, monthly budget)} from the budget tab: the category
-    column plus a column named like "Budget"/"Amount"/"Limit" (else the next column)."""
-    for i, row in enumerate(rows[:HEADER_SEARCH_ROWS]):
-        cells = [str(c).strip().lower() for c in row]
-        if category_col.lower() not in cells:
-            continue
-        cat = cells.index(category_col.lower())
-        amount = next((j for j, c in enumerate(cells) if j != cat and c in ("budget", "monthly budget", "amount", "limit")), cat + 1)
-        budgets = {}
-        for r in rows[i + 1:]:
-            name, value = str(_cell(r, cat) or "").strip(), _amount(_cell(r, amount))
-            if name and value is not None:
-                budgets[name.lower()] = (name, abs(value))
-        return budgets
-    return {}
-
-
-def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
-    sheet_id = spreadsheet_id(settings["sheet"])
-    if not sheet_id:
-        return {"needs_setup": "no_file" if not settings["sheet"].strip() else "bad_link"}
-
+def _month(value: str) -> Optional[str]:
+    text = value.strip()
+    for pattern, order in ((r"^(\d{4})-(\d{1,2})(?:-\d{1,2})?$", (1, 2)), (r"^(\d{1,2})[/.-](\d{4})$", (2, 1)),
+                           (r"^\d{1,2}[/.](\d{1,2})[/.](\d{4})$", (2, 1))):
+        m = re.match(pattern, text)
+        if m:
+            year, month = int(m.group(order[0])), int(m.group(order[1]))
+            return f"{year:04d}-{month:02d}" if 1 <= month <= 12 else None
     try:
-        token = get_valid_access_token(db, user.id)
-        not_found = "Couldn't open that spreadsheet. Check the link in this widget's settings."
-        meta = google_get(f"{API}/{sheet_id}", token, {"fields": "properties.title,sheets.properties.title"},
-                          service="Google Sheets", not_found=not_found)
-        tabs = [s["properties"]["title"] for s in meta.get("sheets", [])]
-        tx_tab = settings["transactions_tab"].strip() or tabs[0]
-        if tx_tab not in tabs:
-            raise HTTPException(status_code=422, detail=f"No tab named {tx_tab!r} in the sheet (tabs: {', '.join(tabs)}). Fix it in this widget's settings.")
-        budget_tab = settings["budget_tab"].strip()
-        ranges = [_tab_range(tx_tab)] + ([_tab_range(budget_tab)] if budget_tab in tabs and budget_tab != tx_tab else [])
-        values = google_get(f"{API}/{sheet_id}/values:batchGet", token, {
-            "ranges": ranges,
-            "valueRenderOption": "UNFORMATTED_VALUE",  # numbers as numbers
-            "dateTimeRenderOption": "SERIAL_NUMBER",  # dates as serial numbers (no locale guessing)
-        }, service="Google Sheets")
-    except NeedsSetup as setup:
-        return {"needs_setup": setup.reason}
+        return datetime.strptime(text, "%B %Y").strftime("%Y-%m")
     except ValueError:
-        return {"needs_setup": "permission"}  # no usable Google token
+        return None
 
-    tables = [v.get("values", []) for v in values.get("valueRanges", [])]
-    rows = tables[0] if tables else []
-    columns = (settings["date_column"], settings["amount_column"], settings["category_column"])
-    found = _header(rows, *columns)
-    if found is None:
-        raise HTTPException(status_code=422, detail=(
-            f"Couldn't find the columns {', '.join(repr(c) for c in columns)} in the {tx_tab!r} tab. "
-            "Set the column names in this widget's settings."
-        ))
-    header_row, col = found
 
-    transactions, skipped = [], 0
-    for row in rows[header_row + 1:]:
-        day, amount = _date(_cell(row, col[columns[0]])), _amount(_cell(row, col[columns[1]]))
-        if day is None or amount is None:
-            skipped += 1 if any(str(c).strip() for c in row) else 0
+def _parse_csv(text: str) -> tuple[list[tuple[str, list[str], float]], list[str]]:
+    """(entries, problems) from a CSV with Month / Category / Sub-category... / Amount
+    columns (a header row; column names matched loosely)."""
+    text = text.lstrip("﻿")
+    first_line = text.split("\n", 1)[0]
+    delimiter = ";" if first_line.count(";") > first_line.count(",") else ","
+    rows = list(csv.reader(io.StringIO(text), delimiter=delimiter))
+    if not rows:
+        raise HTTPException(status_code=422, detail="The file is empty")
+    header = [h.strip().lower() for h in rows[0]]
+
+    def col(*names: str) -> Optional[int]:
+        return next((i for i, h in enumerate(header) if any(h == n or h.startswith(n + " ") for n in names)), None)
+
+    month_col, amount_col = col("month", "date"), col("amount")
+    levels = [col("category"), col("sub-category", "subcategory"), col("sub-sub-category"), col("sub-sub-sub-category")]
+    if month_col is None or amount_col is None or levels[0] is None:
+        raise HTTPException(status_code=422, detail="The first row needs Month, Category and Amount columns")
+
+    entries, problems = [], []
+    for line, row in enumerate(rows[1:], start=2):
+        if not any(cell.strip() for cell in row):
             continue
-        transactions.append((day, amount, str(_cell(row, col[columns[2]]) or "").strip() or "Uncategorized"))
+        cells = [c.strip() for c in row]
+        get = lambda i, cells=cells: cells[i] if i is not None and i < len(cells) else ""  # noqa: E731
+        month, amount = _month(get(month_col)), _amount(get(amount_col))
+        path = [get(i) for i in levels]
+        while path and not path[-1]:
+            path.pop()
+        if month is None or amount is None or not path or any(not p for p in path) or any(len(p) > 120 for p in path):
+            problems.append(f"line {line}: {', '.join(row)[:80]}")
+            continue
+        entries.append((month, path, round(amount, 2)))
+    return entries, problems
 
-    # A sheet with negative amounts has expenses negative and income positive;
-    # otherwise every row is an expense
-    if any(amount < 0 for _, amount, _ in transactions):
-        transactions = [(d, -a, c) for d, a, c in transactions if a < 0]
 
-    today = local_today(ctx.tz)
-    month_start = today.replace(day=1)
-    last_month_start = (month_start - timedelta(days=1)).replace(day=1)
-    spent: dict[str, float] = {}
-    names: dict[str, str] = {}
-    last_month_total = 0.0
-    for day, amount, category in transactions:
-        if month_start <= day <= today:
-            spent[category.lower()] = spent.get(category.lower(), 0.0) + amount
-            names.setdefault(category.lower(), category)
-        elif last_month_start <= day < month_start:
-            last_month_total += amount
+@router.post("/import")
+def import_csv(body: ImportIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    widget_row(db, user, WIDGET_ID)
+    entries, problems = _parse_csv(body.csv)
+    existing = 0 if body.replace else db.query(func.count(BudgetEntry.id)).filter(BudgetEntry.user_id == user.id).scalar()
+    if existing + len(entries) > MAX_ENTRIES:
+        raise HTTPException(status_code=422, detail=f"That would be more than {MAX_ENTRIES} entries")
+    if body.replace:
+        db.query(BudgetEntry).filter(BudgetEntry.user_id == user.id).delete(synchronize_session=False)
+    for month, path, amount in entries:
+        entry = BudgetEntry(user_id=user.id, month=month, amount=Decimal(str(amount)))
+        _set_path(entry, path)
+        db.add(entry)
+    db.commit()
+    return {"imported": len(entries), "skipped": len(problems), "problems": problems[:10]}
 
-    budgets = _budgets(tables[1], settings["category_column"]) if len(tables) > 1 else {}
-    categories = [
-        {"category": name, "spent": round(spent.get(key, 0.0), 2), "budget": budget}
-        for key, (name, budget) in budgets.items()
-    ] + sorted(
-        ({"category": names[key], "spent": round(total, 2), "budget": None} for key, total in spent.items() if key not in budgets),
-        key=lambda c: -c["spent"],
+
+@router.get("/export")
+def export_csv(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    entries = (
+        db.query(BudgetEntry)
+        .filter(BudgetEntry.user_id == user.id)
+        .order_by(BudgetEntry.month, BudgetEntry.category, BudgetEntry.sub1, BudgetEntry.sub2, BudgetEntry.sub3)
+        .all()
     )
-
-    return {
-        "needs_setup": None,
-        "title": meta.get("properties", {}).get("title"),
-        "link": f"https://docs.google.com/spreadsheets/d/{sheet_id}",
-        "month": month_start.isoformat()[:7],
-        "last_month": last_month_start.isoformat()[:7],
-        "currency": settings["currency"].strip(),
-        "total": round(sum(spent.values()), 2),
-        "last_month_total": round(last_month_total, 2),
-        "budget_total": round(sum(b for _, b in budgets.values()), 2) if budgets else None,
-        "has_budget_tab": bool(budgets),
-        "categories": categories,
-        "skipped_rows": skipped,
-    }
-
-
-register(WidgetDefinition(
-    id=WIDGET_ID,
-    name="Budget",
-    description="This month's spending vs your budget per category, from a Google Sheet of transactions (read-only).",
-    fetch=fetch,
-    default_size=(4, 8),
-    min_size=(3, 5),
-    refresh_seconds=1800,
-    config_fields=(
-        ConfigField("sheet", "Spreadsheet link", "text", default=""),
-        ConfigField("transactions_tab", "Transactions tab (empty = first tab)", "text", default=""),
-        ConfigField("date_column", "Date column", "text", default="Date"),
-        ConfigField("amount_column", "Amount column", "text", default="Amount"),
-        ConfigField("category_column", "Category column", "text", default="Category"),
-        ConfigField("budget_tab", "Budget tab (Category + Budget columns)", "text", default="Budget"),
-        ConfigField("currency", "Currency", "text", default="kr"),
-    ),
-))
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(CSV_HEADER)
+    for e in entries:
+        path = _path(e)
+        writer.writerow([e.month, *path, *[""] * (LEVELS - len(path)), f"{e.amount:.2f}"])
+    return Response(
+        content=out.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="budget-{date.today().isoformat()}.csv"'},
+    )
