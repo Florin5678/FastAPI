@@ -212,6 +212,7 @@ code { font-size: 0.9em; background: var(--surface-2); padding: 1px 5px; border-
   width: 100%; max-width: 480px; max-height: calc(100vh - 32px); overflow-y: auto;
   background: var(--surface); border-radius: 16px; padding: 20px; box-shadow: 0 20px 60px rgb(0 0 0 / 0.3);
 }
+.dialog.wide { max-width: 720px; }
 .dialog-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .dialog-head h2 { font-size: 18px; }
 .settings-form { display: flex; flex-direction: column; gap: 14px; }

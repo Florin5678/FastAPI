@@ -135,7 +135,10 @@ def get_briefing() -> str:
     nutrition, reminders, news, calendar, gym. Start here for general questions about the user's day."""
     with _Call() as call:
         data = REGISTRY["assistant"].fetch(call.db, call.user, {}, _ctx())
-        return "\n\n".join(f"## {s['name']}\n{s['text']}" for s in data["sections"]) or "Nothing on the dashboard yet."
+        text = "\n\n".join(f"## {s['name']}\n{s['text']}" for s in data["sections"]) or "Nothing on the dashboard yet."
+        if data.get("context"):
+            text += f"\n\n## Notes from the user (take these into account)\n{data['context']}"
+        return text
 
 
 @mcp.tool(annotations=READ)

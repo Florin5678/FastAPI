@@ -1,50 +1,14 @@
 import { useState } from 'react'
 import type { WidgetProps } from '../types'
+import { AssistantSettingsDialog } from './AssistantSettingsDialog'
+import { buildPrompt, MAX_URL_PROMPT, type AssistantData } from './prompt'
 import './assistant.css'
 
-export type AssistantData = {
-  sections: { widget: string; name: string; text: string }[]
-  // Wording from content/assistant_prompt.md (editable without code changes)
-  prompt: { instructions: string; default_question: string }
-}
+export type { AssistantData } from './prompt'
 
-// claude.ai pre-fills a new chat from ?q=; longer links can be cut off, so "Brief me"
-// trims the briefing to fit (Copy briefing always has everything)
-const MAX_URL_PROMPT = 6000
-
-// The prompt, with list items ("- ...") dropped from the longest sections until its
-// encoded length fits `maxEncoded`. Instructions and the question are never trimmed.
-function buildPrompt(data: AssistantData, maxEncoded = Infinity): { prompt: string; dropped: number; fits: boolean } {
-  const when = new Date().toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
-  const intro = data.prompt.instructions.replaceAll('{when}', when)
-  const sections = data.sections.map((s) => ({ name: s.name, lines: s.text.split('\n'), dropped: 0 }))
-  const render = () => {
-    const briefing = sections
-      .map((s) => [`## ${s.name}`, ...s.lines, ...(s.dropped ? [`(+${s.dropped} more not shown)`] : [])].join('\n'))
-      .join('\n\n')
-    return `${intro}\n\n${briefing}\n\nMy question: ${data.prompt.default_question}`
-  }
-  const items = (s: (typeof sections)[number]) => s.lines.filter((l) => l.startsWith('- ')).length
-
-  let prompt = render()
-  let dropped = 0
-  while (encodeURIComponent(prompt).length > maxEncoded) {
-    // Trim the section with the most items left (the longest one on a tie)
-    const longest = sections
-      .filter((s) => items(s) > 0)
-      .sort((a, b) => items(b) - items(a) || b.lines.join('\n').length - a.lines.join('\n').length)[0]
-    if (!longest) break
-    const last = longest.lines.map((l) => l.startsWith('- ')).lastIndexOf(true)
-    longest.lines.splice(last, 1)
-    longest.dropped += 1
-    dropped += 1
-    prompt = render()
-  }
-  return { prompt, dropped, fits: encodeURIComponent(prompt).length <= maxEncoded }
-}
-
-export function AssistantWidget({ data, actions }: WidgetProps<AssistantData>) {
+export function AssistantWidget({ data, actions, reload }: WidgetProps<AssistantData>) {
   const [note, setNote] = useState<string | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const copy = async (text: string): Promise<boolean> => {
     try {
@@ -80,10 +44,14 @@ export function AssistantWidget({ data, actions }: WidgetProps<AssistantData>) {
       <div className="assistant-buttons">
         <button className="button ghost" onClick={copyBriefing}>Copy briefing</button>
         <button className="button primary" onClick={briefMe}>Brief me ↗</button>
+        <button className="button ghost assistant-settings-button" onClick={() => setSettingsOpen(true)} aria-label="Assistant settings" title="Settings: what the prompt says and includes">⚙</button>
       </div>
       {note
         ? <p className="small assistant-note">{note}</p>
         : <button className="assistant-link small" onClick={() => actions.goTo('connector')}>Claude connector: let Claude read &amp; edit your dashboard →</button>}
+      {settingsOpen && (
+        <AssistantSettingsDialog data={data} onSaved={() => { setNote('Settings saved.'); reload() }} onClose={() => setSettingsOpen(false)} />
+      )}
     </div>
   )
 }

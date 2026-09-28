@@ -21,3 +21,34 @@
 .connector-undone .item-name { text-decoration: line-through; opacity: 0.6; }
 .connector-page .item-list li { align-items: flex-start; }
 .connector-page .item-name { overflow-wrap: anywhere; }
+
+/* Settings button + dialog */
+.assistant-buttons .assistant-settings-button { flex: none; width: 40px; padding: 0; }
+.assistant-settings { display: flex; flex-direction: column; gap: 18px; }
+.assistant-settings section { display: flex; flex-direction: column; gap: 6px; }
+.assistant-settings h3 { margin: 0; font-size: 15px; }
+.assistant-settings p { margin: 0; }
+.assistant-settings textarea, .assistant-settings input[type="text"], .assistant-settings input[type="number"], .assistant-settings select {
+  width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font: inherit; font-size: 14px; resize: vertical;
+}
+.assistant-settings-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.assistant-extras { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.assistant-extras li { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: start; }
+.assistant-extras li > input[type="checkbox"] { width: 18px; height: 18px; margin-top: 9px; accent-color: var(--accent); }
+.assistant-extras li.off .assistant-extra-fields { opacity: 0.55; }
+.assistant-extra-fields { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.assistant-extra-fields input[type="text"] { font-weight: 600; }
+.assistant-briefing-rules { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.assistant-briefing-rules li { display: grid; grid-template-columns: 1fr 9.5em 7.5em; gap: 8px; align-items: center; font-size: 14px; }
+.assistant-items { display: flex; align-items: center; gap: 6px; }
+.assistant-items input[type="number"] { width: 4.5em; }
+.assistant-preview summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.assistant-preview pre {
+  margin: 8px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); max-height: 320px; overflow: auto;
+  white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.45;
+}
+@media (max-width: 640px) {
+  .assistant-briefing-rules li { grid-template-columns: 1fr auto; }
+  .assistant-briefing-rules li > :last-child { grid-column: 1 / -1; }
+}
