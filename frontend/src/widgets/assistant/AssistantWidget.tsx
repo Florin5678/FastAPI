@@ -4,25 +4,19 @@ import './assistant.css'
 
 export type AssistantData = {
   sections: { widget: string; name: string; text: string }[]
+  // Wording from content/assistant_prompt.md (editable without code changes)
+  prompt: { instructions: string; default_question: string; suggestions: string[] }
 }
-
-const SUGGESTIONS = [
-  'Plan my day',
-  'What should I eat to hit my protein goal?',
-  'Anything I should not forget today?',
-  'Summarize my week so far',
-]
 
 // claude.ai pre-fills a new chat from ?q=; beyond this length the prompt goes via the
 // clipboard only (long URLs can be cut off)
 const MAX_URL_PROMPT = 6000
-const DEFAULT_QUESTION = 'Give me a short overview of my day and three practical suggestions.'
 
 function buildPrompt(data: AssistantData, question: string): string {
-  const now = new Date()
-  const when = now.toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
+  const when = new Date().toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
+  const intro = data.prompt.instructions.replaceAll('{when}', when)
   const briefing = data.sections.map((s) => `## ${s.name}\n${s.text}`).join('\n\n')
-  return `Here is my personal dashboard briefing for ${when}. Use it as context.\n\n${briefing}\n\nMy question: ${question.trim() || DEFAULT_QUESTION}`
+  return `${intro}\n\n${briefing}\n\nMy question: ${question.trim() || data.prompt.default_question}`
 }
 
 export function AssistantWidget({ data }: WidgetProps<AssistantData>) {
@@ -67,7 +61,7 @@ export function AssistantWidget({ data }: WidgetProps<AssistantData>) {
 
       <div className="assistant-ask">
         <div className="chips compact">
-          {SUGGESTIONS.map((s) => (
+          {data.prompt.suggestions.map((s) => (
             <button key={s} className="chip" onClick={() => setQuestion(s)}>{s}</button>
           ))}
         </div>
@@ -75,7 +69,7 @@ export function AssistantWidget({ data }: WidgetProps<AssistantData>) {
           rows={2}
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          placeholder="Ask Claude about your day… (or leave empty for an overview)"
+          placeholder={`Ask Claude about your day… (empty = "${data.prompt.default_question}")`}
           aria-label="Question for Claude"
         />
         <div className="assistant-actions">
