@@ -11,6 +11,9 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.auth.account import router as account_router
 from app.auth.google_oauth import router as google_router
+from app.connector.oauth import router as connector_consent_router
+from app.connector.server import MCPDispatch, connector_lifespan
+from app.connector.server import router as connector_router
 from app.mail.gmail_routes import router as gmail_router
 from app.mail.routes import router as mail_router
 from app.widgets.budget import router as budget_router
@@ -42,7 +45,8 @@ async def lifespan(app: FastAPI):
     if os.getenv("SKIP_MIGRATIONS") != "1":  # set in tests / local setups that manage the schema themselves
         run_migrations()
         logger.info("Database migrations are up to date")
-    yield
+    async with connector_lifespan():  # the Claude connector (/mcp)
+        yield
 
 
 app = FastAPI(lifespan=lifespan)
@@ -59,6 +63,8 @@ app.add_middleware(
     https_only=os.getenv("SESSION_HTTPS_ONLY", "true") == "true",
     max_age=30 * 24 * 3600,
 )
+# Claude connector: /mcp and its OAuth endpoints are served by the MCP SDK (see app/connector)
+app.add_middleware(MCPDispatch)
 
 
 @app.get("/health")
@@ -69,6 +75,7 @@ def health():
 # Sign-in (public: Google redirects the browser here) and account info
 app.include_router(google_router, prefix="/auth/google")
 app.include_router(account_router, tags=["account"])
+app.include_router(connector_consent_router)  # "Allow Claude?" page of the Claude connector sign-in
 
 # Everything below needs a signed-in session or X-API-Key (see app/core/security.py)
 app.include_router(gmail_router, prefix="/gmail", tags=["gmail"])  # Gmail passthrough + sync
@@ -80,6 +87,7 @@ app.include_router(journal_router)  # Journal widget: entries, prompts, locked h
 app.include_router(gym_router)  # Gym widget: log / delete workouts
 app.include_router(language_router)  # Language widget: flashcard reviews
 app.include_router(budget_router)  # Budget widget: entries, monthly report, CSV import/export
+app.include_router(connector_router)  # Claude connector: status, undo Claude's changes, disconnect
 
 # The React frontend (built into frontend/dist) is served from everything else
 FRONTEND_DIST = ROOT / "frontend" / "dist"

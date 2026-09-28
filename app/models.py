@@ -192,3 +192,48 @@ class BudgetEntry(Base):
     amount = Column(Numeric(12, 2), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ConnectorClient(Base):
+    """An app registered to use the dashboard as a Claude connector (OAuth Dynamic
+    Client Registration): claude.ai, Claude Code... `info` is the registered client
+    metadata (redirect URIs, name, auth method, hashed secret)."""
+    __tablename__ = "connector_clients"
+
+    id = Column(Integer, primary_key=True, index=True)
+    client_id = Column(String(64), nullable=False, unique=True, index=True)
+    info = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ConnectorToken(Base):
+    """OAuth authorization codes, access tokens and refresh tokens for the Claude
+    connector. Only a SHA-256 hash of each token is stored. Tokens from one sign-in
+    share a `grant_id`, so revoking one revokes the whole sign-in."""
+    __tablename__ = "connector_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    kind = Column(String(10), nullable=False)  # "code" | "access" | "refresh"
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    grant_id = Column(String(32), nullable=False, index=True)
+    client_id = Column(String(64), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    data = Column(JSON, nullable=False)  # scopes, resource; for codes also redirect_uri and PKCE challenge
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_used_at = Column(DateTime, nullable=True)
+
+
+class ConnectorChange(Base):
+    """A change Claude made through the connector, with what's needed to undo it."""
+    __tablename__ = "connector_changes"
+    __table_args__ = (Index("ix_connector_changes_user_created", "user_id", "created_at"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    client_id = Column(String(64), nullable=True)
+    tool = Column(String(60), nullable=False)
+    summary = Column(String(300), nullable=False)
+    undo = Column(JSON, nullable=True)  # {"action": ..., "args": {...}}; None = can't be undone
+    undone_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

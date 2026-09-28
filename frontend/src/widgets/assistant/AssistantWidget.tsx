@@ -43,7 +43,7 @@ function buildPrompt(data: AssistantData, maxEncoded = Infinity): { prompt: stri
   return { prompt, dropped, fits: encodeURIComponent(prompt).length <= maxEncoded }
 }
 
-export function AssistantWidget({ data }: WidgetProps<AssistantData>) {
+export function AssistantWidget({ data, actions }: WidgetProps<AssistantData>) {
   const [note, setNote] = useState<string | null>(null)
 
   const copy = async (text: string): Promise<boolean> => {
@@ -83,7 +83,7 @@ export function AssistantWidget({ data }: WidgetProps<AssistantData>) {
       </div>
       {note
         ? <p className="small assistant-note">{note}</p>
-        : <p className="muted small">Opens claude.ai · your journal is never included</p>}
+        : <button className="assistant-link small" onClick={() => actions.goTo('connector')}>Claude connector: let Claude read &amp; edit your dashboard →</button>}
     </div>
   )
 }

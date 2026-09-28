@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models import User, Token
 from app.core.crypto import encrypt
+from app.connector.oauth import safe_after_login
 
 router = APIRouter()
 
@@ -169,4 +170,6 @@ def google_callback(
     if purpose == "journal":
         request.session["journal_unlocked_at"] = time.time()
         return RedirectResponse("/?view=journal")
-    return RedirectResponse("/")
+    # Signing in to connect Claude: back to the "Allow Claude?" page
+    after_login = safe_after_login(request.session.pop("after_login", None))
+    return RedirectResponse(after_login or "/")
