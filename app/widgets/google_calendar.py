@@ -7,10 +7,9 @@ from datetime import datetime, timedelta
 from typing import Optional
 from urllib.parse import quote
 
-import requests
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.google_api import NeedsSetup, google_get
 from app.core.timeutil import local_zone
 from app.auth.google_tokens import get_valid_access_token
 from app.models import User
@@ -20,24 +19,8 @@ API = "https://www.googleapis.com/calendar/v3"
 MAX_EVENTS_PER_CALENDAR = 50
 
 
-class _NeedsSetup(Exception):
-    def __init__(self, reason: str):
-        self.reason = reason  # "permission" (sign in again) | "api_disabled" (enable in Cloud Console)
-
-
 def _get(path: str, token: str, params: Optional[dict] = None) -> dict:
-    response = requests.get(f"{API}{path}", headers={"Authorization": f"Bearer {token}"}, params=params, timeout=15)
-    if response.status_code == 403:
-        body = response.text
-        if "accessNotConfigured" in body or "SERVICE_DISABLED" in body:
-            raise _NeedsSetup("api_disabled")
-        if "insufficient" in body.lower() or "ACCESS_TOKEN_SCOPE_INSUFFICIENT" in body:
-            raise _NeedsSetup("permission")
-    if response.status_code == 401:
-        raise _NeedsSetup("permission")
-    if not response.ok:
-        raise HTTPException(status_code=502, detail=f"Google Calendar returned an error ({response.status_code}). Try again later.")
-    return response.json()
+    return google_get(f"{API}{path}", token, params, service="Google Calendar")
 
 
 def _event(e: dict, calendar: dict) -> Optional[dict]:
@@ -85,7 +68,7 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
 
         with ThreadPoolExecutor(max_workers=max(1, min(8, len(calendars)))) as pool:
             events = [ev for chunk in pool.map(events_for, calendars) for ev in chunk]
-    except _NeedsSetup as setup:
+    except NeedsSetup as setup:
         return {"needs_setup": setup.reason, "events": [], "days": settings["days"]}
     except ValueError:
         # No usable Google token (e.g. revoked): same fix as a missing permission

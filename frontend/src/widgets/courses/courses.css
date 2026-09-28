@@ -1,0 +1,22 @@
+/* Courses widget */
+.courses-widget { display: flex; flex-direction: column; gap: 14px; }
+.courses-heading {
+  margin: 0 0 6px; font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+}
+.courses-folder { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--accent); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.courses-deadlines, .courses-files { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.courses-deadlines li { display: grid; grid-template-columns: 6.8em 1fr; gap: 10px; padding: 6px 0; font-size: 13px; }
+.courses-deadlines li + li, .courses-files li + li { border-top: 1px solid var(--border); }
+.deadline-date { display: flex; flex-direction: column; white-space: nowrap; font-weight: 650; font-variant-numeric: tabular-nums; }
+.deadline-date.soon { color: var(--danger); }
+.deadline-in { font-size: 11px; font-weight: 400; color: var(--muted); }
+.deadline-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; overflow-wrap: anywhere; line-height: 1.4; }
+.deadline-source { font-size: 11px; color: var(--muted); text-decoration: none; }
+.deadline-source:hover { text-decoration: underline; }
+.courses-files li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; padding: 6px 0; }
+.course-file { display: flex; flex-direction: column; min-width: 0; flex: 1; color: inherit; text-decoration: none; font-size: 13px; }
+.course-file:hover .course-file-name { text-decoration: underline; }
+.course-file-name { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.course-file-error { flex-basis: 100%; margin: 0; }
+.courses-note { margin: 0 0 6px; color: var(--accent); }

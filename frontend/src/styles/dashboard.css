@@ -50,3 +50,11 @@
 .item-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; font-size: 13px; }
 .item-list li + li { border-top: 1px solid var(--border); }
 .item-name { min-width: 0; }
+
+/* Setup state of Google-backed widgets (Budget, Courses) */
+.google-setup { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.google-setup p { margin: 0; font-size: 14px; line-height: 1.5; }
+.google-setup-input {
+  width: 100%; height: 34px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font: inherit; font-size: 14px;
+}

@@ -22,14 +22,13 @@ Here is my personal dashboard briefing for {when}. Use it as context.
 
 ## Extra instructions
 
+- [x] Daily forecast: Tell me about upcoming Calendar events, time, weather, current week number, moon phase (and/or any significant astronomical events observable today).
+- [x] Email: Tell me which whether there are any important emails need whether any of them need a reply today.
+- [x] Urgent tasks: Tell me which urgent tasks need addressing (see Notes & reminders).
 - [x] Meal recommendations: Suggest meals and snacks for the rest of today that fit what I've already eaten (see Nutrition).
 - [x] Workout recommendations: Suggest today's workout based on what I've trained recently (see Gym), so muscle groups get enough rest.
-- [x] Mental health: Add one small, practical suggestion for my wellbeing today (a break, a walk, time offline, reaching out to someone), based on how busy my day looks.
-- [x] Journaling prompt: Give me one journaling question for tonight that fits my day.
-- [ ] Priorities: Point out the three most important things to get done today, in order.
-- [ ] Email triage: Tell me which emails need a reply today and which can wait.
-- [ ] News digest: Summarize the headlines in two or three sentences.
-- [ ] Language practice: Give me a short exercise with today's Spanish and Danish words.
+- [x] News digest: Present up to 3 most important news headlines (if any).
+- [x] Mental health: Either give me a practical suggestion for my wellbeing today (a break, a walk, time offline, reaching out to someone) based on how busy my day looks; alternatively give me one journaling question for today.
 
 ## Default question
 
@@ -44,5 +43,6 @@ Brief me.
 - Notes & reminders: 10
 - News: 6
 - Gym: on
+- Courses: 10
 - Language: off
 - Animal of the day: off

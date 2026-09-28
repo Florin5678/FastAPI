@@ -1,0 +1,15 @@
+/* Budget widget */
+.budget-widget { display: flex; flex-direction: column; gap: 12px; }
+.budget-summary { display: flex; flex-direction: column; gap: 2px; }
+.budget-total { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.budget-left { font-size: 13px; font-weight: 600; color: #1a8a4a; }
+.budget-left.over { color: var(--danger); }
+.budget-categories { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.budget-categories li { display: flex; flex-direction: column; gap: 4px; }
+.budget-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; }
+.budget-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.budget-value { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.budget-foot a { color: var(--accent); }
+@media (prefers-color-scheme: dark) {
+  .budget-left { color: #5fd08e; }
+}

@@ -10,3 +10,4 @@ anthropic
 itsdangerous
 feedparser
 tzdata
+pypdf
