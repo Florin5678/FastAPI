@@ -17,6 +17,7 @@ from app.connector.server import router as connector_router
 from app.mail.gmail_routes import router as gmail_router
 from app.mail.routes import router as mail_router
 from app.widgets.assistant import router as assistant_router
+from app.widgets.assistant_chat import router as assistant_chat_router
 from app.widgets.budget import router as budget_router
 from app.widgets.gym import router as gym_router
 from app.widgets.journal import router as journal_router
@@ -88,6 +89,7 @@ app.include_router(journal_router)  # Journal widget: entries, prompts, locked h
 app.include_router(gym_router)  # Gym widget: log / delete workouts
 app.include_router(language_router)  # Language widget: flashcard reviews
 app.include_router(assistant_router)  # Assistant widget: prompt & briefing settings
+app.include_router(assistant_chat_router)  # Assistant widget: AI chat (Claude API, monthly budget)
 app.include_router(budget_router)  # Budget widget: entries, monthly report, CSV import/export
 app.include_router(connector_router)  # Claude connector: status, undo Claude's changes, disconnect
 

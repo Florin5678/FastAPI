@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { assistantApi, type AssistantSettings, type BriefingWidget } from '../../api'
+import { assistantApi, type AssistantSettings, type BriefingWidget, type ChatModel, type ChatUsage } from '../../api'
 import { Dialog } from '../../components/Dialog'
 import { buildPrompt, composeInstructions, type AssistantData } from './prompt'
 
@@ -11,6 +11,8 @@ type Props = { data: AssistantData; onSaved: () => void; onClose: () => void }
 export function AssistantSettingsDialog({ data, onSaved, onClose }: Props) {
   const [settings, setSettings] = useState<AssistantSettings | null>(null)
   const [widgets, setWidgets] = useState<BriefingWidget[]>([])
+  const [models, setModels] = useState<ChatModel[]>([])
+  const [usage, setUsage] = useState<ChatUsage | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -19,6 +21,9 @@ export function AssistantSettingsDialog({ data, onSaved, onClose }: Props) {
     assistantApi.settings()
       .then((r) => { if (!cancelled) { setSettings(r.settings); setWidgets(r.widgets) } })
       .catch((err) => { if (!cancelled) setError((err as Error).message) })
+    assistantApi.chatStatus()
+      .then((r) => { if (!cancelled) { setModels(r.models); setUsage(r.usage) } })
+      .catch(() => undefined) // the chat section just shows fewer details
     return () => { cancelled = true }
   }, [])
 
@@ -125,6 +130,30 @@ export function AssistantSettingsDialog({ data, onSaved, onClose }: Props) {
             <p className="muted small">What "Brief me" asks at the end.</p>
             <input type="text" value={settings.default_question} maxLength={1000}
               onChange={(e) => update({ default_question: e.target.value })} aria-label="Question" />
+          </section>
+
+          <section>
+            <h3>AI chat</h3>
+            <p className="muted small">
+              The 💬 Chat uses the Claude API, billed per use to your Anthropic account (not your Claude subscription).
+              Haiku is the cheapest and usually enough.
+            </p>
+            <div className="assistant-chat-settings">
+              <label>
+                <span>Model</span>
+                <select value={settings.model} onChange={(e) => update({ model: e.target.value })} aria-label="Chat model">
+                  {(models.length ? models : [{ id: settings.model, label: settings.model, input: 0, output: 0 }]).map((m) => (
+                    <option key={m.id} value={m.id}>{m.label}{m.input ? ` ($${m.input} in / $${m.output} out per million tokens)` : ''}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Monthly budget (USD)</span>
+                <input type="number" min={0} max={200} step={0.5} value={settings.monthly_budget}
+                  onChange={(e) => update({ monthly_budget: Math.max(0, Math.min(200, Number(e.target.value) || 0)) })} aria-label="Monthly budget in US dollars" />
+              </label>
+            </div>
+            {usage && <p className="muted small">This month so far: ${usage.cost.toFixed(2)} ({usage.requests} requests). The chat stops at the budget; 0 turns it off.</p>}
           </section>
 
           <details className="assistant-preview">

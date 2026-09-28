@@ -55,6 +55,9 @@ class AssistantSettings(BaseModel):
     # widget id -> "on" | "off" | number of items; widgets not listed are included as usual
     briefing: dict[str, Union[int, str]] = Field(default_factory=dict)
     context: str = Field("", max_length=4000)  # free-form notes for Claude, e.g. events to ignore
+    # AI chat (paid Claude API, see assistant_chat.py)
+    model: str = Field("claude-haiku-4-5", max_length=60)
+    monthly_budget: float = Field(5.0, ge=0, le=200)  # USD; 0 = chat off
 
 
 def _sections(markdown: str) -> dict[str, str]:
@@ -173,9 +176,9 @@ register(WidgetDefinition(
     name="Assistant",
     description="A daily briefing from all your widgets, and one click to ask Claude about it on claude.ai (uses your Claude subscription, no extra cost).",
     fetch=fetch,
-    default_size=(4, 3),
-    min_size=(3, 3),
-    layout_version=2,  # v2: 8x8 -> 4x3 once the preview and question box were removed
+    default_size=(4, 4),
+    min_size=(3, 4),
+    layout_version=3,  # v2: 8x8 -> 4x3 once the preview and question box were removed; v3: 4x4 for the Chat button
     refresh_seconds=1800,
     enabled_by_default=True,
 ))
@@ -212,6 +215,9 @@ def save_settings(body: AssistantSettings, user: User = Depends(get_current_user
             raise HTTPException(status_code=422, detail="Each widget must be on, off or a number of items")
         if isinstance(rule, int) and not 0 < rule <= MAX_ITEMS:
             raise HTTPException(status_code=422, detail=f"Number of items must be 1 to {MAX_ITEMS}")
+    from app.widgets.assistant_chat import MODELS  # (imported here: assistant_chat imports this module)
+    if body.model not in MODELS:
+        raise HTTPException(status_code=422, detail=f"Model must be one of: {', '.join(MODELS)}")
     row = _row(db, user)
     if row is None:
         raise HTTPException(status_code=404, detail="Add the Assistant widget to your dashboard first")

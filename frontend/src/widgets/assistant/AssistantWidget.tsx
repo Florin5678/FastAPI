@@ -46,6 +46,7 @@ export function AssistantWidget({ data, actions, reload }: WidgetProps<Assistant
         <button className="button primary" onClick={briefMe}>Brief me ↗</button>
         <button className="button ghost assistant-settings-button" onClick={() => setSettingsOpen(true)} aria-label="Assistant settings" title="Settings: what the prompt says and includes">⚙</button>
       </div>
+      <button className="button ghost assistant-chat-button" onClick={() => actions.goTo('chat')}>💬 Chat with your dashboard</button>
       {note
         ? <p className="small assistant-note">{note}</p>
         : <button className="assistant-link small" onClick={() => actions.goTo('connector')}>Claude connector: let Claude read &amp; edit your dashboard →</button>}
