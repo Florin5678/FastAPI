@@ -35,7 +35,9 @@ INSTRUCTIONS = (
     "This is the user's personal dashboard (calendar, email, notes & reminders, nutrition, gym, budget, "
     "weather, news). Times are in the user's local timezone. Every change you make is logged on the dashboard "
     "and can be undone (see list_recent_changes / undo_change). Confirm with the user before deleting things. "
-    "The user's journal is private and not available."
+    "The user's journal is private and not available. "
+    "When the user asks to be briefed (\"brief me\", \"what's my day like\", \"morning briefing\"...), call "
+    "get_briefing first and answer from it, following the instructions at its top."
 )
 
 MCP_PATH = "/mcp"
@@ -131,12 +133,20 @@ def _month(value: Optional[str]) -> str:
 
 @mcp.tool(annotations=READ)
 def get_briefing() -> str:
-    """Today's overview across the dashboard (the same briefing as the Assistant widget): email, weather,
-    nutrition, reminders, news, calendar, gym. Start here for general questions about the user's day."""
+    """The user's daily briefing from their dashboard's Assistant widget: their own instructions for how to
+    brief them, then today's email, calendar, weather, nutrition, reminders, news, gym. Call this whenever the
+    user says "brief me" or asks about their day, and answer following the instructions at the top."""
     with _Call() as call:
         data = REGISTRY["assistant"].fetch(call.db, call.user, {}, _ctx())
-        text = "\n\n".join(f"## {s['name']}\n{s['text']}" for s in data["sections"]) or "Nothing on the dashboard yet."
-        return text
+        when = datetime.now(_zone()).strftime("%A %d %B, %H:%M")
+        prompt = data["prompt"]
+        sections = "\n\n".join(f"## {s['name']}\n{s['text']}" for s in data["sections"]) or "Nothing on the dashboard yet."
+        # Same order as the prompt the widget copies to claude.ai: instructions, briefing, question
+        return (
+            f"# How to brief me\n{prompt['instructions'].replace('{when}', when)}\n\n"
+            f"# My dashboard briefing\n{sections}\n\n"
+            f"# If I just said \"brief me\" (or similar), answer this\n{prompt['default_question']}"
+        )
 
 
 @mcp.tool(annotations=READ)
