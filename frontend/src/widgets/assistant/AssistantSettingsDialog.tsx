@@ -5,7 +5,7 @@ import { buildPrompt, composeInstructions, type AssistantData } from './prompt'
 
 type Props = { data: AssistantData; onSaved: () => void; onClose: () => void }
 
-// Everything that goes into the prompt "Brief me" / "Copy briefing" send to Claude:
+// Everything that goes into the prompt "Open in Claude" / "Copy briefing" send to Claude:
 // opening text, extra instructions (switchable), which widgets
 // are included (and how many items), and the question at the end. Saved per user.
 export function AssistantSettingsDialog({ data, onSaved, onClose }: Props) {
@@ -119,7 +119,7 @@ export function AssistantSettingsDialog({ data, onSaved, onClose }: Props) {
 
           <section>
             <h3>Question</h3>
-            <p className="muted small">What "Brief me" asks at the end.</p>
+            <p className="muted small">What "Open in Claude" asks at the end.</p>
             <input type="text" value={settings.default_question} maxLength={1000}
               onChange={(e) => update({ default_question: e.target.value })} aria-label="Question" />
           </section>

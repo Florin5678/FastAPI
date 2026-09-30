@@ -59,6 +59,14 @@
 .assistant-chat-settings label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 550; }
 .chat-page { display: flex; flex-direction: column; gap: 12px; }
 .chat-page .section-head { margin-bottom: 0; }
+/* Side panel over the dashboard (same overlay as the email detail) */
+.chat-panel {
+  width: 100%; max-width: 560px; height: 100%; background: var(--surface);
+  padding: 20px 20px 16px; box-shadow: -12px 0 40px rgb(0 0 0 / 0.25);
+}
+.chat-panel .section-head h2 { font-size: 18px; }
+.chat-head-actions { display: flex; align-items: center; gap: 8px; }
+.chat-panel .chat-log { flex: 1; min-height: 0; max-height: none; }
 .chat-log { display: flex; flex-direction: column; gap: 12px; min-height: 45vh; max-height: 62vh; overflow-y: auto; }
 .chat-empty { display: flex; flex-direction: column; gap: 12px; margin: auto 0; }
 .chat-empty p { margin: 0; line-height: 1.5; }

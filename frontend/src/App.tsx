@@ -11,10 +11,9 @@ import { JournalPage } from './widgets/journal/JournalPage'
 import { GymPage } from './widgets/gym/GymPage'
 import { BudgetPage } from './widgets/budget/BudgetPage'
 import { ConnectorPage } from './widgets/assistant/ConnectorPage'
-import { ChatPage } from './widgets/assistant/ChatPage'
 import type { DashboardActions } from './widgets/types'
 
-type Tab = 'home' | 'today' | 'inbox' | 'nutrition' | 'journal' | 'gym' | 'budget' | 'connector' | 'chat'
+type Tab = 'home' | 'today' | 'inbox' | 'nutrition' | 'journal' | 'gym' | 'budget' | 'connector'
 
 function firstName(me: Me): string {
   return (me.name || me.email).split(/[\s@]/)[0]
@@ -89,6 +88,7 @@ export default function App() {
       setTab(view)
       window.scrollTo(0, 0)
     },
+    refresh: () => setRefreshKey((k) => k + 1),
   }), [])
 
   const logout = async () => {
@@ -133,7 +133,6 @@ export default function App() {
         {tab === 'gym' && <GymPage />}
         {tab === 'budget' && <BudgetPage />}
         {tab === 'connector' && <ConnectorPage />}
-        {tab === 'chat' && <ChatPage />}
         {tab === 'inbox' && (
           <Inbox key={inboxCategory ?? 'all'} initialCategory={inboxCategory} refreshKey={refreshKey} onOpen={setOpenEmailId} />
         )}

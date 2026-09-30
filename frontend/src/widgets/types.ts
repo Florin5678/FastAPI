@@ -3,7 +3,8 @@ import type { ComponentType } from 'react'
 // Things any widget can ask the dashboard to do
 export type DashboardActions = {
   openEmail: (id: number) => void
-  goTo: (view: 'today' | 'inbox' | 'nutrition' | 'journal' | 'gym' | 'budget' | 'connector' | 'chat', options?: { category?: string }) => void
+  goTo: (view: 'today' | 'inbox' | 'nutrition' | 'journal' | 'gym' | 'budget' | 'connector', options?: { category?: string }) => void
+  refresh: () => void // reload every widget (e.g. after the AI chat changed something)
 }
 
 export type WidgetProps<T> = {

@@ -7,7 +7,7 @@ after that, changes here have no effect.
 What the Assistant widget sends to Claude together with your daily briefing.
 Keep the four `## ` headings as they are.
 `{when}` is replaced with the current day and time. "Default question" is what
-the "Brief me" button asks Claude, after the briefing.
+the "Open in Claude" button asks Claude, after the briefing.
 
 Under "Extra instructions", each line is one extra request added to the prompt:
 `- [x] Name: what to ask Claude` is on, `- [ ] Name: ...` is off. Tick or untick

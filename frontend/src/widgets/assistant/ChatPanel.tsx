@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { assistantApi, connectorApi, type ChatMessage, type ChatReply, type ChatUsage } from '../../api'
 import './assistant.css'
 
@@ -23,14 +24,16 @@ function loadTurns(): Turn[] {
 
 // The Assistant's AI chat: Claude with the whole dashboard (except the journal) as
 // context, able to look things up and make changes. Uses the paid Claude API, capped
-// by the monthly budget in the Assistant settings.
-export function ChatPage() {
+// by the monthly budget in the Assistant settings. Opens as a side panel over the
+// dashboard; the conversation is kept (per browser tab) when it's closed.
+export function ChatPanel({ onClose }: { onClose: (changed: boolean) => void }) {
   const [turns, setTurns] = useState<Turn[]>(loadTurns)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<{ enabled: boolean; usage: ChatUsage } | null>(null)
   const [undone, setUndone] = useState<Set<number>>(new Set())
+  const [changed, setChanged] = useState(false) // Claude changed something: refresh the dashboard on close
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -65,6 +68,7 @@ export function ChatPage() {
         failed: r.actions.filter((a) => a.error).map((a) => a.tool),
       }])
       setStatus((s) => (s ? { ...s, usage: r.usage } : s))
+      if (r.changes.length > 0) setChanged(true)
     } catch (err) {
       setError((err as Error).message)
       setTurns(turns) // take the unanswered question back out, so it can be sent again
@@ -83,6 +87,7 @@ export function ChatPage() {
     try {
       await connectorApi.undo(id)
       setUndone((u) => new Set(u).add(id))
+      setChanged(true)
     } catch (err) {
       setError((err as Error).message)
     }
@@ -91,11 +96,23 @@ export function ChatPage() {
   const usage = status?.usage
   const overBudget = usage ? usage.cost >= usage.budget : false
 
-  return (
-    <section className="chat-page">
+  // Refresh the dashboard on close if Claude changed something while the panel was open
+  const close = useCallback(() => onClose(changed), [onClose, changed])
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') close() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [close])
+
+  return createPortal(
+    <div className="overlay" onClick={close}>
+    <section className="chat-page chat-panel" role="dialog" aria-modal="true" aria-label="Chat with your dashboard" onClick={(e) => e.stopPropagation()}>
       <div className="section-head">
-        <h2>Assistant</h2>
-        {turns.length > 0 && <button className="button ghost" onClick={() => { setTurns([]); setUndone(new Set()) }}>New chat</button>}
+        <h2>Chat with your dashboard</h2>
+        <div className="chat-head-actions">
+          {turns.length > 0 && <button className="button ghost" onClick={() => { setTurns([]); setUndone(new Set()) }}>New chat</button>}
+          <button className="icon-button" onClick={close} aria-label="Close">✕</button>
+        </div>
       </div>
 
       {status && !status.enabled && (
@@ -147,5 +164,7 @@ export function ChatPage() {
         </p>
       )}
     </section>
+    </div>,
+    document.body,
   )
 }

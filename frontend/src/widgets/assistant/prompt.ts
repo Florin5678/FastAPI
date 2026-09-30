@@ -1,4 +1,4 @@
-// Building the prompt "Brief me" / "Copy briefing" send to Claude (shared by the widget
+// Building the prompt "Open in Claude" / "Copy briefing" send to Claude (shared by the widget
 // and its Settings dialog's preview)
 import type { AssistantSettings } from '../../api'
 
@@ -8,7 +8,7 @@ export type AssistantData = {
   prompt: { instructions: string; default_question: string }
 }
 
-// claude.ai pre-fills a new chat from ?q=; longer links can be cut off, so "Brief me"
+// claude.ai pre-fills a new chat from ?q=; longer links can be cut off, so "Open in Claude"
 // trims the briefing to fit (Copy briefing always has everything)
 export const MAX_URL_PROMPT = 6000
 
