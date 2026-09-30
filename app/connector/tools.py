@@ -347,14 +347,35 @@ def delete_note(note_id: str) -> str:
 
 # ---- Nutrition ----
 
+@mcp.tool(annotations=READ)
+def search_foods(query: str) -> dict:
+    """Look up nutrition values per 100 g: generic foods (USDA) and branded products (Open Food Facts),
+    the same search as the dashboard's Add food dialog. Use it before log_food when the user says what
+    they ate, unless it's one of their saved foods (list_saved_foods / log_saved_food)."""
+    with _Call() as call:
+        results = _run(nutrition.search_foods, q=query.strip()[:100], user=call.user)
+        return {"results": [
+            {"name": f"{r['name']} ({r['brand']})" if r["brand"] else r["name"], "source": r["source"], "per_100g": r["per_100g"]}
+            for r in results[:10]
+        ]}
+
+
 @mcp.tool(annotations=WRITE)
 def log_food(name: str, calories: float, protein: float = 0, carbs: float = 0, fat: float = 0, fiber: float = 0,
-             sugar: float = 0, sat_fat: float = 0, grams: Optional[float] = None, day: Optional[str] = None) -> dict:
-    """Log a food for a day (default today). Nutrients are for the amount eaten (grams, if given)."""
+             sugar: float = 0, sat_fat: float = 0, grams: Optional[float] = None, day: Optional[str] = None,
+             values_per_100g: bool = False) -> dict:
+    """Log a food for a day (default today). Nutrients are for the amount eaten; or, with
+    values_per_100g=true (e.g. straight from search_foods), per 100 g and scaled to `grams` (then required).
+    If the user didn't say the amount, estimate a typical portion and tell them."""
     with _Call() as call:
+        values = {"calories": calories, "protein": protein, "carbs": carbs, "fat": fat, "fiber": fiber, "sugar": sugar, "sat_fat": sat_fat}
+        if values_per_100g:
+            if not grams:
+                raise ToolError("Give `grams` (the amount eaten) when the values are per 100 g")
+            values = {k: round(v * grams / 100, 1) for k, v in values.items()}
+        calories = values["calories"]
         entry = _run(nutrition.add_entry, nutrition.EntryIn(
-            day=_day(day), name=name, grams=grams,
-            nutrients=nutrition.Nutrients(calories=calories, protein=protein, carbs=carbs, fat=fat, fiber=fiber, sugar=sugar, sat_fat=sat_fat),
+            day=_day(day), name=name, grams=grams, nutrients=nutrition.Nutrients(**values),
         ), user=call.user, db=call.db)
         call.record("log_food", f'Logged {entry["name"]} ({round(calories)} kcal) on {entry["day"]}', {"action": "delete_food", "args": {"id": entry["id"]}})
         return entry
