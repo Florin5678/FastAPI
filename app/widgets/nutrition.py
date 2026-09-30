@@ -128,14 +128,29 @@ def day_summary(db: Session, user: User, day: date) -> dict:
 
 
 def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
-    return day_summary(db, user, local_today(ctx.tz))
+    today = local_today(ctx.tz)
+    yesterday = day_summary(db, user, today - timedelta(days=1))
+    # Yesterday is only for the Assistant briefing (see brief())
+    return {**day_summary(db, user, today), "yesterday": {"nutrients": yesterday["nutrients"], "entries": yesterday["entries"]}}
+
+
+def _brief_day(day: dict, limit: int | None) -> tuple[str, str]:
+    """("Calories 1450/2900 kcal; ...", "food, food, ...") for one day."""
+    parts = [f"{n['label']} {round(n['actual'])}/{round(n['goal'])} {n['unit']}" + (" (limit)" if n["kind"] == "limit" else "")
+             for n in day["nutrients"]]
+    return "; ".join(parts), ", ".join(e["name"] for e in day["entries"][:limit or 8])
 
 
 def brief(data: dict, limit: int | None = None) -> str:
-    parts = [f"{n['label']} {round(n['actual'])}/{round(n['goal'])} {n['unit']}" + (" (limit)" if n["kind"] == "limit" else "")
-             for n in data["nutrients"]]
-    foods = ", ".join(e["name"] for e in data["entries"][:limit or 8]) or "nothing logged yet"
-    return f"Today's intake vs goals: {'; '.join(parts)}. Foods: {foods}."
+    totals, foods = _brief_day(data, limit)
+    text = f"Today's intake vs goals: {totals}. Foods: {foods or 'nothing logged yet'}."
+    yesterday = data.get("yesterday")
+    if yesterday and yesterday["entries"]:
+        totals, foods = _brief_day(yesterday, limit)
+        text += f"\nYesterday's intake vs goals: {totals}. Foods: {foods}."
+    elif yesterday is not None:
+        text += "\nYesterday: nothing logged."
+    return text
 
 
 register(WidgetDefinition(
