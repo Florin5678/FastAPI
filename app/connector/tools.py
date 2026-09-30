@@ -36,6 +36,10 @@ INSTRUCTIONS = (
     "weather, news). Times are in the user's local timezone. Every change you make is logged on the dashboard "
     "and can be undone (see list_recent_changes / undo_change). Confirm with the user before deleting things. "
     "The user's journal is private and not available. "
+    "You can add, edit and delete entries for the user: food (search_foods + log_food for any food, "
+    "log_saved_food for saved ones, update_food, delete_food), workouts (log_workout, update_workout, "
+    "delete_workout), budget (add_budget_entry, update_budget_entry, delete_budget_entry, set_budget), "
+    "reminders and notes. "
     "When the user asks to be briefed (\"brief me\", \"what's my day like\", \"morning briefing\"...), call "
     "get_briefing first and answer from it, following the instructions at its top."
 )
@@ -279,7 +283,7 @@ def _due(value: Optional[str]) -> Optional[datetime]:
 
 @mcp.tool(annotations=WRITE)
 def add_reminder(text: str, due: Optional[str] = None) -> dict:
-    """Add a reminder. `due`: optional local date-time like 2026-10-02T09:00."""
+    """Notes & reminders: add a NEW reminder. `due`: optional local date-time like 2026-10-02T09:00."""
     with _Call() as call:
         item = _run(notes.add_reminder, notes.ReminderIn(text=text, due=_due(due)), user=call.user, db=call.db)
         call.record("add_reminder", f'Added reminder "{item["text"]}"', {"action": "delete_reminder", "args": {"id": item["id"]}})
@@ -317,7 +321,7 @@ def delete_reminder(reminder_id: str) -> str:
 
 @mcp.tool(annotations=WRITE)
 def add_note(text: str) -> dict:
-    """Add a note."""
+    """Notes & reminders: add a NEW note."""
     with _Call() as call:
         item = _run(notes.add_note, notes.NoteIn(text=text), user=call.user, db=call.db)
         call.record("add_note", f'Added note "{item["text"][:80]}"', {"action": "delete_note", "args": {"id": item["id"]}})
@@ -349,7 +353,7 @@ def delete_note(note_id: str) -> str:
 
 @mcp.tool(annotations=READ)
 def search_foods(query: str) -> dict:
-    """Look up nutrition values per 100 g: generic foods (USDA) and branded products (Open Food Facts),
+    """Nutrition: look up calories and macros per 100 g for a food: generic foods (USDA) and branded products (Open Food Facts),
     the same search as the dashboard's Add food dialog. Use it before log_food when the user says what
     they ate, unless it's one of their saved foods (list_saved_foods / log_saved_food)."""
     with _Call() as call:
@@ -364,7 +368,8 @@ def search_foods(query: str) -> dict:
 def log_food(name: str, calories: float, protein: float = 0, carbs: float = 0, fat: float = 0, fiber: float = 0,
              sugar: float = 0, sat_fat: float = 0, grams: Optional[float] = None, day: Optional[str] = None,
              values_per_100g: bool = False) -> dict:
-    """Log a food for a day (default today). Nutrients are for the amount eaten; or, with
+    """Nutrition: add a NEW entry to the food log (any meal, snack or drink, not only saved foods) for a day
+    (default today). Nutrients are for the amount eaten; or, with
     values_per_100g=true (e.g. straight from search_foods), per 100 g and scaled to `grams` (then required).
     If the user didn't say the amount, estimate a typical portion and tell them."""
     with _Call() as call:
@@ -383,7 +388,7 @@ def log_food(name: str, calories: float, protein: float = 0, carbs: float = 0, f
 
 @mcp.tool(annotations=DELETE)
 def delete_food(entry_id: int) -> str:
-    """Remove a food from the log (ids from get_nutrition; can be undone)."""
+    """Nutrition: remove an entry from the food log (ids from get_nutrition; can be undone)."""
     with _Call() as call:
         row = call.db.query(NutritionEntry).filter(NutritionEntry.id == entry_id, NutritionEntry.user_id == call.user.id).first()
         if row is None:
@@ -402,7 +407,7 @@ def update_food(entry_id: int, grams: Optional[float] = None, name: Optional[str
                 calories: Optional[float] = None, protein: Optional[float] = None, carbs: Optional[float] = None,
                 fat: Optional[float] = None, fiber: Optional[float] = None, sugar: Optional[float] = None,
                 sat_fat: Optional[float] = None) -> dict:
-    """Edit a logged food (ids from get_nutrition). Change only `grams` to rescale its values to the new
+    """Nutrition: edit an existing food log entry (ids from get_nutrition). Change only `grams` to rescale its values to the new
     amount; or give new nutrient values for the amount eaten (others stay as they are); or rename it, or
     move it to another `day` (like 2026-09-28)."""
     with _Call() as call:
@@ -436,7 +441,7 @@ def list_saved_foods() -> dict:
 
 @mcp.tool(annotations=WRITE)
 def log_saved_food(food: str, grams: Optional[float] = None, day: Optional[str] = None) -> dict:
-    """Log one of the user's saved foods again. `food`: its name (or id) from list_saved_foods; `grams`:
+    """Nutrition: add a saved food ("My foods") to the food log again. `food`: its name (or id) from list_saved_foods; `grams`:
     the amount eaten (default: the amount used last time, else 100 g); `day` default today."""
     with _Call() as call:
         foods = _run(nutrition.list_saved_foods, user=call.user, db=call.db)["foods"]
@@ -460,7 +465,7 @@ def log_saved_food(food: str, grams: Optional[float] = None, day: Optional[str] 
 
 @mcp.tool(annotations=WRITE)
 def log_workout(kind: str, minutes: int, day: Optional[str] = None, note: Optional[str] = None) -> dict:
-    """Log a workout. `kind` must be one of the workout types from get_workouts; `day` default today."""
+    """Gym: add a NEW workout entry. `kind` must be one of the workout types from get_workouts; `day` default today."""
     with _Call() as call:
         workout = _run(gym.log_workout, gym.WorkoutIn(day=_day(day), kind=kind, minutes=minutes, note=note), user=call.user, db=call.db)
         call.record("log_workout", f'Logged {workout["kind"]} workout, {workout["minutes"]} min on {workout["day"]}',
@@ -471,7 +476,7 @@ def log_workout(kind: str, minutes: int, day: Optional[str] = None, note: Option
 @mcp.tool(annotations=EDIT)
 def update_workout(workout_id: int, kind: Optional[str] = None, minutes: Optional[int] = None,
                    day: Optional[str] = None, note: Optional[str] = None) -> dict:
-    """Edit a logged workout (ids from get_workouts): its type, minutes, day (like 2026-09-28) or note
+    """Gym: edit an existing workout entry (ids from get_workouts): its type, minutes, day (like 2026-09-28) or note
     ("" clears the note). Only the fields given change."""
     with _Call() as call:
         row = call.db.query(Workout).filter(Workout.id == workout_id, Workout.user_id == call.user.id).first()
@@ -489,7 +494,7 @@ def update_workout(workout_id: int, kind: Optional[str] = None, minutes: Optiona
 
 @mcp.tool(annotations=DELETE)
 def delete_workout(workout_id: int) -> str:
-    """Delete a logged workout (ids from get_workouts; can be undone)."""
+    """Gym: delete a workout entry (ids from get_workouts; can be undone)."""
     with _Call() as call:
         row = call.db.query(Workout).filter(Workout.id == workout_id, Workout.user_id == call.user.id).first()
         if row is None:
@@ -515,7 +520,7 @@ def _path_text(path: list[str]) -> str:
 
 @mcp.tool(annotations=WRITE)
 def add_budget_entry(path: list[str], amount: float, month: Optional[str] = None) -> dict:
-    """Add an income or spending entry. `path`: 1-4 category levels, e.g. ["Expenses", "Groceries", "Netto"]
+    """Budget: add a NEW income or expense entry. `path`: 1-4 category levels, e.g. ["Expenses", "Groceries", "Netto"]
     or ["Income", "SU"]. `amount` is positive, in the user's currency. `month` like 2026-09 (default this month)."""
     with _Call() as call:
         entry = _run(budget.add_entry, budget.EntryIn(month=_month(month), path=path, amount=amount), user=call.user, db=call.db)
@@ -527,7 +532,7 @@ def add_budget_entry(path: list[str], amount: float, month: Optional[str] = None
 @mcp.tool(annotations=EDIT)
 def update_budget_entry(entry_id: int, amount: Optional[float] = None, path: Optional[list[str]] = None,
                         month: Optional[str] = None) -> dict:
-    """Change a budget entry's amount, category path or month (ids from get_budget)."""
+    """Budget: edit an existing entry's amount, category path or month (ids from get_budget)."""
     with _Call() as call:
         before = _budget_entry(call, entry_id)
         fields = {k: v for k, v in (("amount", amount), ("path", path), ("month", month)) if v is not None}
@@ -539,7 +544,7 @@ def update_budget_entry(entry_id: int, amount: Optional[float] = None, path: Opt
 
 @mcp.tool(annotations=DELETE)
 def delete_budget_entry(entry_id: int) -> str:
-    """Delete a budget entry (can be undone)."""
+    """Budget: delete an entry (can be undone)."""
     with _Call() as call:
         before = _budget_entry(call, entry_id)
         _run(budget.delete_entry, entry_id, user=call.user, db=call.db)
@@ -550,7 +555,7 @@ def delete_budget_entry(entry_id: int) -> str:
 
 @mcp.tool(annotations=EDIT)
 def set_budget(category: str, amount: Optional[float] = None) -> dict:
-    """Set the monthly budget for a spending category (the level under "Expenses", e.g. "Groceries").
+    """Budget: set the monthly budget for a spending category (the level under "Expenses", e.g. "Groceries").
     Leave `amount` empty to remove that budget."""
     with _Call() as call:
         previous = budget._budgets(call.db, call.user)
