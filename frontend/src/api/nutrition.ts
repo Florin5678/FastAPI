@@ -4,14 +4,23 @@ import { json, request } from './client'
 export type NutrientKey = 'calories' | 'protein' | 'carbs' | 'fat' | 'fiber' | 'sugar' | 'sat_fat'
 export type NutrientValues = Record<NutrientKey, number>
 
-export type FoodResult = { fdc_id: number; name: string; data_type: string; per_100g: NutrientValues }
+// A search result: USDA (generic foods) or Open Food Facts ('off', branded products)
+export type FoodResult = {
+  source: 'usda' | 'off'
+  id: string
+  fdc_id: number | null
+  name: string
+  brand: string | null
+  data_type: string | null // USDA data type, or the pack size for Open Food Facts
+  per_100g: NutrientValues
+}
 
 export type FoodEntry = {
   id: number
   day: string
   name: string
   grams: number | null
-  source: 'manual' | 'usda'
+  source: 'manual' | 'usda' | 'off'
   nutrients: NutrientValues
   added_at: string | null
 }
@@ -23,7 +32,7 @@ export type NewEntry = {
   name: string
   grams?: number
   nutrients: Partial<NutrientValues> // for the amount eaten
-  source: 'manual' | 'usda'
+  source: 'manual' | 'usda' | 'off'
   fdc_id?: number
   per_100g?: NutrientValues // with save: store the food in "My foods"
   save?: boolean

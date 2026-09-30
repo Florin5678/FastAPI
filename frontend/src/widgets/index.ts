@@ -10,7 +10,6 @@ import { JournalWidget } from './journal/JournalWidget'
 import { CalendarWidget } from './calendar/CalendarWidget'
 import { AnimalWidget } from './animal/AnimalWidget'
 import { GymWidget } from './gym/GymWidget'
-import { LanguageWidget } from './language/LanguageWidget'
 import { BudgetWidget } from './budget/BudgetWidget'
 import { AssistantWidget } from './assistant/AssistantWidget'
 import type { WidgetUI } from './types'
@@ -25,7 +24,6 @@ export const WIDGET_UI: Record<string, WidgetUI> = {
   calendar: { icon: '📅', component: CalendarWidget },
   animal: { icon: '🐾', component: AnimalWidget },
   gym: { icon: '🏋️', component: GymWidget },
-  language: { icon: '🗣️', component: LanguageWidget },
   budget: { icon: '💰', component: BudgetWidget },
   assistant: { icon: '✨', component: AssistantWidget },
 }

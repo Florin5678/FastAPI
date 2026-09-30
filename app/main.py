@@ -21,7 +21,6 @@ from app.widgets.assistant_chat import router as assistant_chat_router
 from app.widgets.budget import router as budget_router
 from app.widgets.gym import router as gym_router
 from app.widgets.journal import router as journal_router
-from app.widgets.language import router as language_router
 from app.widgets.notes import router as notes_router
 from app.widgets.nutrition import router as nutrition_router
 from app.widgets.routes import router as widget_router
@@ -87,7 +86,6 @@ app.include_router(nutrition_router)  # Nutrition widget: food log, history, USD
 app.include_router(notes_router)  # Notes & reminders widget
 app.include_router(journal_router)  # Journal widget: entries, prompts, locked history
 app.include_router(gym_router)  # Gym widget: log / delete workouts
-app.include_router(language_router)  # Language widget: flashcard reviews
 app.include_router(assistant_router)  # Assistant widget: prompt & briefing settings
 app.include_router(assistant_chat_router)  # Assistant widget: AI chat (Claude API, monthly budget)
 app.include_router(budget_router)  # Budget widget: entries, monthly report, CSV import/export

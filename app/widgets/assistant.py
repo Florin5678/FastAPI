@@ -118,7 +118,10 @@ def load_settings(db: Session, user: User) -> AssistantSettings:
     saved = (row.config or {}).get("assistant") if row else None
     if saved:
         try:
-            return AssistantSettings.model_validate(saved)
+            settings = AssistantSettings.model_validate(saved)
+            # Drop widgets that were removed from the app (e.g. Language)
+            settings.briefing = {k: v for k, v in settings.briefing.items() if k in REGISTRY}
+            return settings
         except ValueError:
             logger.warning("Assistant settings for user %s are invalid; using defaults", user.id)
     return defaults_from_file()

@@ -48,5 +48,4 @@ Brief me.
 - Notes & reminders: 10
 - News: 6
 - Gym: on
-- Language: off
 - Animal of the day: off

@@ -9,12 +9,17 @@
 # saved to "My foods" (widget row config["saved_foods"], values per 100 g) and
 # picked again later.
 #
-# Food lookup: USDA FoodData Central (free; needs a free key from
-# https://fdc.nal.usda.gov/api-key-signup.html in USDA_API_KEY - the shared
-# DEMO_KEY only allows ~10 lookups/hour. With a key: 1,000 requests/hour).
+# Food lookup, both free and searched together:
+# - USDA FoodData Central: generic foods and dishes (needs a free key from
+#   https://fdc.nal.usda.gov/api-key-signup.html in USDA_API_KEY - the shared
+#   DEMO_KEY only allows ~10 lookups/hour. With a key: 1,000 requests/hour).
+# - Open Food Facts (https://world.openfoodfacts.org, ODbL): branded packaged products
+#   worldwide, incl. Danish/Romanian supermarkets; values from the labels. No key;
+#   asks for an identifying User-Agent.
 import os
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import quote, urlencode
@@ -34,6 +39,13 @@ from app.widgets.registry import ConfigField, WidgetContext, WidgetDefinition, r
 WIDGET_ID = "nutrition"
 HISTORY_MAX_DAYS = 366
 FDC_SEARCH_URL = "https://api.nal.usda.gov/fdc/v1/foods/search"
+OFF_SEARCH_URL = "https://search.openfoodfacts.org/search"
+OFF_USER_AGENT = "PersonalDashboard/1.0 (https://github.com/Florin5678/FastAPI; personal non-commercial dashboard)"
+# Open Food Facts nutriment keys (per 100 g) for our nutrients
+OFF_KEYS = {
+    "calories": "energy-kcal_100g", "protein": "proteins_100g", "carbs": "carbohydrates_100g", "fat": "fat_100g",
+    "fiber": "fiber_100g", "sugar": "sugars_100g", "sat_fat": "saturated-fat_100g",
+}
 SEARCH_CACHE_SECONDS = 24 * 3600
 
 # key, label, unit, kind ("goal" = reach it, "limit" = stay under it), FDC nutrient numbers
@@ -170,7 +182,7 @@ class EntryIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     grams: Optional[float] = Field(None, gt=0, le=5000)
     nutrients: Nutrients  # for the amount eaten
-    source: str = Field("manual", pattern="^(manual|usda)$")
+    source: str = Field("manual", pattern="^(manual|usda|off)$")
     fdc_id: Optional[int] = None
     per_100g: Optional[Nutrients] = None  # with save=True: store the food in "My foods"
     save: bool = False
@@ -376,19 +388,17 @@ def _per_100g(food: dict) -> dict:
     return values
 
 
-@router.get("/foods")
-def search_foods(q: str = Query(..., min_length=2, max_length=100), user: User = Depends(get_current_user)):
-    """Search USDA FoodData Central. Values are per 100 g."""
-    query = q.strip().lower()
-    cached = _search_cache.get(query)
-    if cached and time.time() - cached[0] < SEARCH_CACHE_SECONDS:
-        return cached[1]
+class _SearchFailed(Exception):
+    def __init__(self, message: str):
+        self.message = message
 
+
+def _search_usda(query: str) -> list[dict]:
     params = {
         "api_key": os.getenv("USDA_API_KEY") or "DEMO_KEY",
         "query": query,
         "pageSize": 15,
-        # Generic foods and dishes; "Branded" (packaged products) is mostly noise here
+        # Generic foods and dishes; branded products come from Open Food Facts instead
         "dataType": "Foundation,SR Legacy,Survey (FNDDS)",
     }
     # USDA's server rejects "+" for spaces (400); encode spaces as %20, keep , ( ) literal
@@ -396,23 +406,80 @@ def search_foods(q: str = Query(..., min_length=2, max_length=100), user: User =
     try:
         response = requests.get(url, timeout=15)
     except requests.RequestException:
-        raise HTTPException(status_code=502, detail="The food database didn't respond. Try again, or enter the values manually.") from None
+        raise _SearchFailed("USDA didn't respond") from None
     if response.status_code == 429:
-        raise HTTPException(
-            status_code=429,
-            detail="Food search limit reached for this hour. Enter the values manually for now (a personal USDA key raises the limit).",
-        )
+        raise _SearchFailed("USDA search limit reached for this hour (a personal USDA key raises it)")
     if not response.ok:
-        raise HTTPException(status_code=502, detail="The food database returned an error. Enter the values manually for now.")
-
-    results = [
-        {
-            "fdc_id": food["fdcId"],
-            "name": food["description"],
-            "data_type": food.get("dataType"),
-            "per_100g": _per_100g(food),
-        }
+        raise _SearchFailed(f"USDA returned an error ({response.status_code})")
+    return [
+        {"source": "usda", "id": str(food["fdcId"]), "fdc_id": food["fdcId"], "name": food["description"],
+         "brand": None, "data_type": food.get("dataType"), "per_100g": _per_100g(food)}
         for food in response.json().get("foods", [])
     ]
-    _search_cache[query] = (time.time(), results)
+
+
+def _off_value(nutriments: dict, key: str) -> Optional[float]:
+    value = nutriments.get(OFF_KEYS[key])
+    if value is None and key == "calories" and nutriments.get("energy-kj_100g") is not None:
+        value = float(nutriments["energy-kj_100g"]) / 4.184  # some labels only give kJ
+    try:
+        return round(float(value), 2) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _search_open_food_facts(query: str) -> list[dict]:
+    try:
+        response = requests.get(
+            OFF_SEARCH_URL,
+            params={"q": query, "page_size": 20, "fields": "code,product_name,brands,nutriments,quantity"},
+            headers={"User-Agent": OFF_USER_AGENT}, timeout=15,
+        )
+    except requests.RequestException:
+        raise _SearchFailed("Open Food Facts didn't respond") from None
+    if not response.ok:
+        raise _SearchFailed(f"Open Food Facts returned an error ({response.status_code})")
+    results, seen = [], set()
+    for product in response.json().get("hits", []):
+        nutriments = product.get("nutriments") or {}
+        values = {key: _off_value(nutriments, key) for key, *_ in NUTRIENTS}
+        name = (product.get("product_name") or "").strip()
+        if not name or values["calories"] is None:
+            continue  # skip products without a name or calories on the label
+        brands = product.get("brands")
+        brand = ", ".join(brands[:2]) if isinstance(brands, list) else (brands or None)
+        key = (name.lower(), (brand or "").lower(), values["calories"])
+        if key in seen:
+            continue  # the same product listed twice
+        seen.add(key)
+        results.append({
+            "source": "off", "id": str(product.get("code") or len(results)), "fdc_id": None, "name": name,
+            "brand": brand, "data_type": product.get("quantity"),
+            "per_100g": {k: (v if v is not None else 0) for k, v in values.items()},
+        })
+    return results[:15]
+
+
+@router.get("/foods")
+def search_foods(q: str = Query(..., min_length=2, max_length=100), user: User = Depends(get_current_user)):
+    """Search USDA (generic foods) and Open Food Facts (branded products) together.
+    Values are per 100 g; each result says its `source`. If one database fails, the
+    other's results still come back."""
+    query = q.strip().lower()
+    cached = _search_cache.get(query)
+    if cached and time.time() - cached[0] < SEARCH_CACHE_SECONDS:
+        return cached[1]
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(_search_usda, query), pool.submit(_search_open_food_facts, query)]
+    results, problems = [], []
+    for future in futures:
+        try:
+            results.extend(future.result())
+        except _SearchFailed as e:
+            problems.append(e.message)
+    if problems and not results:
+        raise HTTPException(status_code=502, detail=f"Food search failed ({'; '.join(problems)}). Enter the values manually for now.")
+    if not problems:
+        _search_cache[query] = (time.time(), results)  # don't cache half results
     return results

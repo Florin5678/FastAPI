@@ -20,15 +20,16 @@ export function barState(n: NutrientRow): { percent: number; tone: 'progress' | 
     : { percent, tone: 'progress', hint: `${fmt(n.goal - n.actual)} ${n.unit} to go` }
 }
 
-// The nutrient fields in dialogs, in display order
+// The nutrient fields in dialogs, in display order (two per row: calories/protein,
+// carbs/sugar, fat/saturated fat, fiber)
 export const FIELDS: { key: NutrientKey; label: string; unit: string }[] = [
   { key: 'calories', label: 'Calories', unit: 'kcal' },
   { key: 'protein', label: 'Protein', unit: 'g' },
   { key: 'carbs', label: 'Carbs', unit: 'g' },
-  { key: 'fat', label: 'Fat', unit: 'g' },
-  { key: 'fiber', label: 'Fiber', unit: 'g' },
   { key: 'sugar', label: 'Sugar', unit: 'g' },
+  { key: 'fat', label: 'Fat', unit: 'g' },
   { key: 'sat_fat', label: 'Saturated fat', unit: 'g' },
+  { key: 'fiber', label: 'Fiber', unit: 'g' },
 ]
 
 // Values per 100 g -> values for `grams` (one decimal)
