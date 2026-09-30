@@ -69,6 +69,8 @@ UNDO_ACTIONS: dict[str, Any] = {
     ), user=user, db=db),
     "delete_workout": lambda db, user, a: gym.delete_workout(a["id"], user=user, db=db),
     "readd_workout": lambda db, user, a: gym.log_workout(gym.WorkoutIn(**a["workout"]), user=user, db=db),
+    "restore_workout": lambda db, user, a: gym.update_workout(
+        a["id"], gym.WorkoutPatch(**{**a["workout"], "note": a["workout"]["note"] or ""}), user=user, db=db),
     "delete_budget_entry": lambda db, user, a: budget.delete_entry(a["id"], user=user, db=db),
     "readd_budget_entry": lambda db, user, a: budget.add_entry(budget.EntryIn(**a["entry"]), user=user, db=db),
     "update_budget_entry": lambda db, user, a: budget.update_entry(a["id"], budget.EntryPatch(**a["entry"]), user=user, db=db),

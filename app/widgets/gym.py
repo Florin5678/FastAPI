@@ -160,6 +160,36 @@ def log_workout(body: WorkoutIn, user: User = Depends(get_current_user), db: Ses
     return _workout_dict(workout)
 
 
+class WorkoutPatch(BaseModel):
+    day: Optional[date] = None
+    kind: Optional[str] = None
+    minutes: Optional[int] = Field(None, ge=1, le=600)
+    note: Optional[str] = Field(None, max_length=300)  # "" clears it
+
+
+@router.patch("/workouts/{workout_id}")
+def update_workout(workout_id: int, body: WorkoutPatch, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    workout = db.query(Workout).filter(Workout.id == workout_id, Workout.user_id == user.id).first()
+    if workout is None:
+        raise HTTPException(status_code=404, detail="Workout not found")
+    if body.kind is not None:
+        routines = load_routines()
+        if body.kind not in routines:
+            raise HTTPException(status_code=422, detail=f"Type must be one of: {', '.join(routines)}")
+        workout.kind = body.kind
+    if body.day is not None:
+        if body.day > datetime.now(timezone.utc).date() + timedelta(days=1):
+            raise HTTPException(status_code=422, detail="Workouts can't be logged for a future day")
+        workout.day = body.day
+    if body.minutes is not None:
+        workout.minutes = body.minutes
+    if body.note is not None:
+        workout.note = body.note.strip() or None
+    db.commit()
+    db.refresh(workout)
+    return _workout_dict(workout)
+
+
 @router.delete("/workouts/{workout_id}")
 def delete_workout(workout_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     workout = db.query(Workout).filter(Workout.id == workout_id, Workout.user_id == user.id).first()

@@ -468,6 +468,25 @@ def log_workout(kind: str, minutes: int, day: Optional[str] = None, note: Option
         return workout
 
 
+@mcp.tool(annotations=EDIT)
+def update_workout(workout_id: int, kind: Optional[str] = None, minutes: Optional[int] = None,
+                   day: Optional[str] = None, note: Optional[str] = None) -> dict:
+    """Edit a logged workout (ids from get_workouts): its type, minutes, day (like 2026-09-28) or note
+    ("" clears the note). Only the fields given change."""
+    with _Call() as call:
+        row = call.db.query(Workout).filter(Workout.id == workout_id, Workout.user_id == call.user.id).first()
+        if row is None:
+            raise ToolError("Workout not found")
+        before = {"day": row.day.isoformat(), "kind": row.kind, "minutes": row.minutes, "note": row.note}
+        workout = _run(gym.update_workout, workout_id, gym.WorkoutPatch(
+            kind=kind, minutes=minutes, day=_day(day) if day else None, note=note,
+        ), user=call.user, db=call.db)
+        call.record("update_workout", f'Changed {before["kind"]} workout ({before["day"]}, {before["minutes"]} min) → '
+                    f'{workout["kind"]}, {workout["day"]}, {workout["minutes"]} min',
+                    {"action": "restore_workout", "args": {"id": workout_id, "workout": before}})
+        return workout
+
+
 @mcp.tool(annotations=DELETE)
 def delete_workout(workout_id: int) -> str:
     """Delete a logged workout (ids from get_workouts; can be undone)."""
