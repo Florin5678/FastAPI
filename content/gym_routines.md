@@ -13,3 +13,4 @@ freely; workouts you already logged keep their name.
 - Triceps
 - Back
 - HEMA
+- Run
