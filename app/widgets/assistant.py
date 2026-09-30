@@ -9,9 +9,9 @@
 #
 # What goes into the prompt is edited in the widget's Settings dialog and stored in the
 # widget's row (config["assistant"]): the opening instructions, the default question,
-# switchable extra instructions, which widgets are included (and how many items), and
-# free-form additional context. content/assistant_prompt.md only provides the starting
-# values until the settings are first saved.
+# switchable extra instructions, and which widgets are included (and how many items).
+# content/assistant_prompt.md only provides the starting values until the settings are
+# first saved.
 import logging
 from pathlib import Path
 from typing import Optional, Union
@@ -54,7 +54,6 @@ class AssistantSettings(BaseModel):
     extras: list[ExtraInstruction] = Field(default_factory=list, max_length=MAX_EXTRAS)
     # widget id -> "on" | "off" | number of items; widgets not listed are included as usual
     briefing: dict[str, Union[int, str]] = Field(default_factory=dict)
-    context: str = Field("", max_length=4000)  # free-form notes for Claude, e.g. events to ignore
     # AI chat (paid Claude API, see assistant_chat.py)
     model: str = Field("claude-haiku-4-5", max_length=60)
     monthly_budget: float = Field(5.0, ge=0, le=200)  # USD; 0 = chat off
@@ -119,7 +118,7 @@ def load_settings(db: Session, user: User) -> AssistantSettings:
     if saved:
         try:
             settings = AssistantSettings.model_validate(saved)
-            # Drop widgets that were removed from the app (e.g. Language)
+            # Drop widgets that no longer exist in the app
             settings.briefing = {k: v for k, v in settings.briefing.items() if k in REGISTRY}
             return settings
         except ValueError:
@@ -129,15 +128,13 @@ def load_settings(db: Session, user: User) -> AssistantSettings:
 
 def build_prompt(s: AssistantSettings) -> dict:
     """{"instructions", "default_question"} for the frontend: the opening text, then the
-    enabled extra instructions, then the additional context."""
+    enabled extra instructions."""
     instructions = s.instructions.strip() or PROMPT_DEFAULTS["instructions"]
     extras = [e for e in s.extras if e.enabled]
     if extras:
         instructions += "\n\nIn your answer, also include (only where it fits my question):\n" + "\n".join(
             f"- {e.name}: {e.text}" for e in extras
         )
-    if s.context.strip():
-        instructions += "\n\nAdditional context from me (take it into account):\n" + s.context.strip()
     return {"instructions": instructions, "default_question": s.default_question.strip() or PROMPT_DEFAULTS["default question"]}
 
 
@@ -171,7 +168,7 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
             text = "(couldn't load right now)"
         sections.append({"widget": definition.id, "name": definition.name, "text": text})
 
-    return {"sections": sections, "prompt": build_prompt(prefs), "context": prefs.context.strip()}
+    return {"sections": sections, "prompt": build_prompt(prefs)}
 
 
 register(WidgetDefinition(

@@ -6,7 +6,7 @@ import { buildPrompt, composeInstructions, type AssistantData } from './prompt'
 type Props = { data: AssistantData; onSaved: () => void; onClose: () => void }
 
 // Everything that goes into the prompt "Brief me" / "Copy briefing" send to Claude:
-// opening text, extra instructions (switchable), additional context, which widgets
+// opening text, extra instructions (switchable), which widgets
 // are included (and how many items), and the question at the end. Saved per user.
 export function AssistantSettingsDialog({ data, onSaved, onClose }: Props) {
   const [settings, setSettings] = useState<AssistantSettings | null>(null)
@@ -61,14 +61,6 @@ export function AssistantSettingsDialog({ data, onSaved, onClose }: Props) {
             <p className="muted small">The first lines of the prompt. <code>{'{when}'}</code> becomes the current day and time.</p>
             <textarea rows={3} value={settings.instructions} maxLength={3000}
               onChange={(e) => update({ instructions: e.target.value })} aria-label="Opening instructions" />
-          </section>
-
-          <section>
-            <h3>Additional context</h3>
-            <p className="muted small">Anything Claude should know or take into account, e.g. calendar events to ignore.</p>
-            <textarea rows={4} value={settings.context} maxLength={4000}
-              placeholder={'e.g. Ignore the CABIN TRIP calendar event, I\'m not going.\nI\'m vegetarian on weekdays.'}
-              onChange={(e) => update({ context: e.target.value })} aria-label="Additional context" />
           </section>
 
           <section>

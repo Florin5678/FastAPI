@@ -50,6 +50,5 @@ export function composeInstructions(s: AssistantSettings): string {
   if (extras.length) {
     text += '\n\nIn your answer, also include (only where it fits my question):\n' + extras.map((e) => `- ${e.name.trim()}: ${e.text.trim()}`).join('\n')
   }
-  if (s.context.trim()) text += '\n\nAdditional context from me (take it into account):\n' + s.context.trim()
   return text
 }

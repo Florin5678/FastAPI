@@ -8,7 +8,6 @@ export type AssistantSettings = {
   default_question: string
   extras: ExtraInstruction[]
   briefing: Record<string, number | 'on' | 'off'> // widget id -> items / on / off (missing = included as usual)
-  context: string // free-form notes for Claude
   model: string // AI chat model id
   monthly_budget: number // AI chat spend limit per month, USD (0 = off)
 }

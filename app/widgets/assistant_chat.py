@@ -2,7 +2,7 @@
 # whole dashboard as context and the same tools as the Claude connector.
 #
 # - Context: the system prompt holds the user's dashboard briefing (every widget with a
-#   brief(), so never the journal) and their "additional context" notes. For details
+#   brief(), so never the journal). For details
 #   and changes Claude calls the connector tools (app/connector/tools.py): structured
 #   retrieval, which suits this data better than vector search.
 # - Tools run in-process as the signed-in user; changes land in the connector's change
@@ -100,7 +100,7 @@ def _briefing(db: Session, user: User) -> str:
     return text
 
 
-def _system(db: Session, user: User, context: str) -> list[dict]:
+def _system(db: Session, user: User) -> list[dict]:
     rules = (
         "You are the assistant built into the user's personal dashboard. Answer briefly and concretely. "
         + INSTRUCTIONS
@@ -109,8 +109,6 @@ def _system(db: Session, user: User, context: str) -> list[dict]:
         "anything unless the user clearly asked for it. Amounts of money are in the user's currency (kr)."
     )
     cached = f"{rules}\n\n# The user's dashboard right now\n\n{_briefing(db, user)}"
-    if context.strip():
-        cached += f"\n\n# Notes from the user (take these into account)\n{context.strip()}"
     now = datetime.now(ZoneInfo(TIMEZONE)).strftime("%A %d %B %Y, %H:%M")
     return [
         {"type": "text", "text": cached, "cache_control": {"type": "ephemeral"}},
@@ -187,7 +185,7 @@ async def chat(body: ChatIn, user: User = Depends(get_current_user), db: Session
     if body.messages[-1].role != "user":
         raise HTTPException(status_code=422, detail="The last message must be from you")
 
-    system = _system(db, user, settings.context)
+    system = _system(db, user)
     tools = _tools()
     messages: list[dict] = [{"role": m.role, "content": m.content} for m in body.messages[-MAX_HISTORY:]]
     while messages and messages[0]["role"] != "user":
