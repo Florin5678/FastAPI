@@ -193,7 +193,6 @@ function Tree({ nodes, level, data, money, expanded, onToggle, onEdit, onAdd, on
         const spending = node.path.length === 2 && !isIncome(node.path[0])
         const budget = spending ? data.budgets[node.name] : undefined
         const previous = spending ? data.previous.categories[node.name] : undefined
-        const ratio = budget ? node.total / budget : null
         return (
           <li key={node.name} className={`budget-level-${level}`}>
             <div className="budget-node-row">
@@ -225,11 +224,6 @@ function Tree({ nodes, level, data, money, expanded, onToggle, onEdit, onAdd, on
                 {isLeaf && <button className="icon-button" onClick={() => onEdit(node.own[0])} title="Edit" aria-label={`Edit ${node.name}`}>✎</button>}
                 <button className="icon-button" onClick={() => onDelete(node)} title="Delete (this month)" aria-label={`Delete ${node.name}`}>🗑</button>
               </span>
-              {ratio !== null && (
-                <span className="bar budget-node-bar">
-                  <span className={`bar-fill ${ratio > 1 ? 'over' : ratio > 0.85 ? 'progress' : 'done'}`} style={{ width: `${Math.min(ratio, 1) * 100}%` }} />
-                </span>
-              )}
             </div>
             {!isLeaf && open && (
               <>

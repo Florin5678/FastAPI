@@ -59,7 +59,6 @@
 .budget-level-0 > .budget-node-row { font-weight: 700; font-size: 15px; }
 .budget-level-1 > .budget-node-row { font-weight: 600; }
 .budget-tree .budget-tree { padding-left: 18px; border-left: 1px solid var(--border); margin-left: 11px; }
-.budget-node-bar { grid-column: 1 / -1; margin: -2px 0 2px 20px; height: 6px; }
 .budget-own { color: var(--muted); font-style: italic; }
 
 /* Budgets editor */
