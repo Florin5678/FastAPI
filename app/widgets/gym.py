@@ -14,7 +14,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.core.timeutil import local_today
 from app.models import User, Workout
-from app.widgets.registry import ConfigField, WidgetContext, WidgetDefinition, register, widget_row
+from app.widgets.registry import REGISTRY, ConfigField, WidgetContext, WidgetDefinition, register, widget_row
 
 WIDGET_ID = "gym"
 # Edit the workout types in content/gym_routines.md (repo root)
@@ -249,10 +249,28 @@ def month_report(
         t["sessions"] += 1
         t["minutes"] += w.minutes
 
+    # Every Monday-Sunday week that touches the month, counted in full (also the days in the
+    # neighbouring months), so each one compares with the weekly goals
+    weeks_from, weeks_to = _week_start(start), _week_start(end - timedelta(days=1)) + timedelta(days=7)
+    weeks: dict[date, dict] = {}
+    week = weeks_from
+    while week < weeks_to:
+        weeks[week] = {"week_start": week.isoformat(), "week": week.isocalendar().week, "sessions": 0, "minutes": 0, "kinds": {}}
+        week += timedelta(weeks=1)
+    for w in db.query(Workout).filter(Workout.user_id == user.id, Workout.day >= weeks_from, Workout.day < weeks_to):
+        t = weeks[_week_start(w.day)]
+        t["sessions"] += 1
+        t["minutes"] += w.minutes
+        t["kinds"][w.kind] = t["kinds"].get(w.kind, 0) + 1
+    goals = REGISTRY[WIDGET_ID].settings_for(widget_row(db, user, WIDGET_ID))
+
     first = db.query(func.min(Workout.day)).filter(Workout.user_id == user.id).scalar()
     return {
         "month": month,
         "days": days,
+        "weeks": list(weeks.values()),
+        "goal_workouts": goals["goal_workouts"],
+        "goal_minutes": goals["goal_minutes"],
         "totals": sorted(totals.values(), key=lambda t: -t["minutes"]),
         "sessions": len(workouts),
         "minutes": sum(w.minutes for w in workouts),

@@ -56,9 +56,11 @@
   font-size: 11px; line-height: 1.3; font-weight: 550; padding: 2px 5px; border-radius: 5px;
   background: var(--surface); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.gym-totals { list-style: none; margin: 0; display: flex; flex-direction: column; gap: 10px; }
-.gym-totals li { display: grid; grid-template-columns: 6em 1fr auto; align-items: center; gap: 10px; font-size: 14px; }
-.gym-totals-kind { font-weight: 600; }
+.gym-weekly { list-style: none; margin: 0; display: flex; flex-direction: column; gap: 14px; }
+.gym-weekly li { width: 100%; display: grid; grid-template-columns: 9em 1fr auto; align-items: center; gap: 4px 12px; font-size: 14px; }
+.gym-weekly-label { display: flex; flex-direction: column; }
+.gym-weekly-now { color: var(--accent); font-weight: 600; font-size: 12px; }
+.gym-weekly-kinds { grid-column: 2 / -1; }
 .gym-totals-value { white-space: nowrap; font-variant-numeric: tabular-nums; }
 @media (max-width: 640px) {
   .gym-month { gap: 2px; padding: 6px; }

@@ -6,6 +6,10 @@ export type Workout = { id: number; day: string; kind: string; minutes: number; 
 export type GymMonth = {
   month: string // YYYY-MM
   days: Record<string, Workout[]> // YYYY-MM-DD -> workouts that day
+  // Every Monday–Sunday week touching the month, counted in full; kinds = sessions per type
+  weeks: { week_start: string; week: number; sessions: number; minutes: number; kinds: Record<string, number> }[]
+  goal_workouts: number
+  goal_minutes: number
   totals: { kind: string; sessions: number; minutes: number }[]
   sessions: number
   minutes: number

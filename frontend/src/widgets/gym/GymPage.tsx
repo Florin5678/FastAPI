@@ -21,7 +21,7 @@ function duration(minutes: number): string {
   return h ? (m ? `${h} h ${m} min` : `${h} h`) : `${m} min`
 }
 
-// Full view of the Gym widget: a month calendar of workouts plus the month's totals
+// Full view of the Gym widget: a month calendar of workouts plus weekly totals vs the goals
 export function GymPage() {
   const today = localDate()
   const thisMonth = today.slice(0, 7)
@@ -42,7 +42,6 @@ export function GymPage() {
   const [y, m] = month.split('-').map(Number)
   const daysInMonth = new Date(y, m, 0).getDate()
   const leadingBlanks = (new Date(y, m - 1, 1).getDay() + 6) % 7 // weeks start on Monday
-  const maxMinutes = Math.max(1, ...(data?.totals ?? []).map((t) => t.minutes))
   const canGoBack = !data?.first_month || month > data.first_month
 
   return (
@@ -111,25 +110,36 @@ export function GymPage() {
           )}
 
           <div className="section-head history-head">
-            <h2>Month totals</h2>
+            <h2>Weekly totals</h2>
+            <span className="muted small">Goal: {data.goal_workouts} workouts · {duration(data.goal_minutes)} a week</span>
           </div>
-          {data.totals.length === 0 ? (
-            <div className="empty">No workouts logged in {monthTitle(month)}.</div>
-          ) : (
-            <ul className="gym-totals card">
-              {data.totals.map((t) => (
-                <li key={t.kind}>
-                  <span className="gym-totals-kind">{t.kind}</span>
+          <ul className="gym-weekly card">
+            {data.weeks.map((w) => {
+              const startDay = new Date(w.week_start + 'T12:00')
+              const endDay = new Date(startDay.getTime() + 6 * 86400000)
+              const range = `${startDay.toLocaleDateString([], { day: 'numeric', month: 'short' })} – ${endDay.toLocaleDateString([], { day: 'numeric', month: 'short' })}`
+              const isCurrent = w.week_start <= today && today < localDate(new Date(endDay.getTime() + 86400000))
+              const future = w.week_start > today
+              const met = w.sessions >= data.goal_workouts && w.minutes >= data.goal_minutes
+              const ratio = data.goal_minutes ? w.minutes / data.goal_minutes : w.sessions / Math.max(1, data.goal_workouts)
+              const kinds = Object.entries(w.kinds).sort((a, b) => b[1] - a[1]).map(([k, n]) => (n > 1 ? `${k} ×${n}` : k)).join(', ')
+              return (
+                <li key={w.week_start} className={future ? 'muted' : ''}>
+                  <span className="gym-weekly-label">
+                    <span><strong>Week {w.week}</strong>{isCurrent && <span className="gym-weekly-now"> · this week</span>}</span>
+                    <span className="muted small">{range}</span>
+                  </span>
                   <span className="bar">
-                    <span className="bar-fill done" style={{ width: `${(t.minutes / maxMinutes) * 100}%` }} />
+                    <span className={`bar-fill ${met ? 'done' : 'progress'}`} style={{ width: `${Math.min(ratio, 1) * 100}%` }} />
                   </span>
-                  <span className="muted small gym-totals-value">
-                    {t.sessions}× · {duration(t.minutes)}
+                  <span className="small gym-totals-value">
+                    {w.sessions}/{data.goal_workouts} workouts · {duration(w.minutes)}{met && ' ✓'}
                   </span>
+                  {kinds && <span className="muted small gym-weekly-kinds">{kinds}</span>}
                 </li>
-              ))}
-            </ul>
-          )}
+              )
+            })}
+          </ul>
         </>
       )}
     </section>
