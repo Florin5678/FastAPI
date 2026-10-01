@@ -23,9 +23,6 @@ export const budgetApi = {
   update: (id: number, changes: Partial<Omit<BudgetEntry, 'id'>>) =>
     request<BudgetEntry>(`/widgets/budget/entries/${id}`, { method: 'PATCH', ...json(changes) }),
   remove: (id: number) => request<unknown>(`/widgets/budget/entries/${id}`, { method: 'DELETE' }),
-  // month omitted = rename in every month
-  rename: (path: string[], name: string, month?: string) =>
-    request<{ changed: number }>('/widgets/budget/rename', { method: 'POST', ...json({ path, name, month }) }),
   removeGroup: (path: string[], month: string) =>
     request<{ deleted: number }>('/widgets/budget/delete-group', { method: 'POST', ...json({ path, month }) }),
   setBudgets: (budgets: Record<string, number | null>) =>

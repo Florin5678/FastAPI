@@ -9,14 +9,13 @@ import './budget.css'
 type Editing =
   | { kind: 'add'; path: string[] }
   | { kind: 'edit'; entry: BudgetEntry }
-  | { kind: 'rename'; node: TreeNode }
   | { kind: 'import' }
 
 const key = (path: string[]) => path.join('\u0000')
 
 // Full view of the Budget widget: one month's report (totals, category tree, budgets)
-// plus the last 12 months. Every number is editable: entries, category names at any
-// level (in one month or all), budgets; the log can be imported/exported as CSV.
+// plus the last 12 months. Every number is editable: entries (amount, category path,
+// month) and budgets; the log can be imported/exported as CSV.
 export function BudgetPage() {
   const thisMonth = localDate().slice(0, 7)
   const [month, setMonth] = useState(thisMonth)
@@ -83,7 +82,7 @@ export function BudgetPage() {
           <div className="card budget-card">
             <div className="budget-card-head">
               <h3>Categories</h3>
-              <span className="muted small">Tap an amount to edit it · ✎ rename · ＋ add · 🗑 delete (this month)</span>
+              <span className="muted small">Tap an entry or ✎ to edit it · ＋ add · 🗑 delete (this month)</span>
             </div>
             {data.entries.length === 0 ? (
               <div className="empty">Nothing logged in {monthTitle(month)}.</div>
@@ -97,7 +96,6 @@ export function BudgetPage() {
                 onToggle={toggle}
                 onEdit={(entry) => setEditing({ kind: 'edit', entry })}
                 onAdd={(path) => setEditing({ kind: 'add', path })}
-                onRename={(node) => setEditing({ kind: 'rename', node })}
                 onDelete={removeGroup}
               />
             )}
@@ -126,9 +124,6 @@ export function BudgetPage() {
           onDelete={async () => { await budgetApi.remove(editing.entry.id); reload() }}
           onClose={() => setEditing(null)}
         />
-      )}
-      {editing?.kind === 'rename' && (
-        <RenameDialog node={editing.node} month={month} onDone={reload} onClose={() => setEditing(null)} />
       )}
       {editing?.kind === 'import' && (
         <ImportDialog hasEntries={Boolean(data?.first_month)} onDone={reload} onClose={() => setEditing(null)} />
@@ -178,7 +173,7 @@ function Stats({ data, money }: { data: BudgetMonth; money: Money }) {
   )
 }
 
-function Tree({ nodes, level, data, money, expanded, onToggle, onEdit, onAdd, onRename, onDelete }: {
+function Tree({ nodes, level, data, money, expanded, onToggle, onEdit, onAdd, onDelete }: {
   nodes: TreeNode[]
   level: number
   data: BudgetMonth
@@ -187,7 +182,6 @@ function Tree({ nodes, level, data, money, expanded, onToggle, onEdit, onAdd, on
   onToggle: (path: string[]) => void
   onEdit: (entry: BudgetEntry) => void
   onAdd: (path: string[]) => void
-  onRename: (node: TreeNode) => void
   onDelete: (node: TreeNode) => void
 }) {
   return (
@@ -228,7 +222,7 @@ function Tree({ nodes, level, data, money, expanded, onToggle, onEdit, onAdd, on
               </span>
               <span className="budget-node-tools">
                 {node.path.length < 4 && <button className="icon-button" onClick={() => onAdd(node.path)} title="Add under this" aria-label={`Add under ${node.name}`}>＋</button>}
-                <button className="icon-button" onClick={() => onRename(node)} title="Rename" aria-label={`Rename ${node.name}`}>✎</button>
+                {isLeaf && <button className="icon-button" onClick={() => onEdit(node.own[0])} title="Edit" aria-label={`Edit ${node.name}`}>✎</button>}
                 <button className="icon-button" onClick={() => onDelete(node)} title="Delete (this month)" aria-label={`Delete ${node.name}`}>🗑</button>
               </span>
               {ratio !== null && (
@@ -252,7 +246,9 @@ function Tree({ nodes, level, data, money, expanded, onToggle, onEdit, onAdd, on
                           <span className="budget-node-total">
                             <button className="budget-leaf" onClick={() => onEdit(entry)}>{money(entry.amount, 2)}</button>
                           </span>
-                          <span className="budget-node-tools" />
+                          <span className="budget-node-tools">
+                            <button className="icon-button" onClick={() => onEdit(entry)} title="Edit" aria-label={`Edit ${node.name} (no sub-category)`}>✎</button>
+                          </span>
                         </div>
                       </li>
                     ))}
@@ -260,7 +256,7 @@ function Tree({ nodes, level, data, money, expanded, onToggle, onEdit, onAdd, on
                 )}
                 {node.children.length > 0 && (
                   <Tree nodes={node.children} level={level + 1} data={data} money={money} expanded={expanded}
-                    onToggle={onToggle} onEdit={onEdit} onAdd={onAdd} onRename={onRename} onDelete={onDelete} />
+                    onToggle={onToggle} onEdit={onEdit} onAdd={onAdd} onDelete={onDelete} />
                 )}
               </>
             )}
@@ -351,44 +347,6 @@ function History({ data, money, onPick, thisMonth }: { data: BudgetMonth; money:
       <MonthChart history={data.history} current={data.month} lastMonth={thisMonth} money={money} onPick={onPick} />
       <div className="budget-legend"><span><i className="budget-history-income" />Income</span><span><i className="budget-history-expenses" />Spent</span><span>Tap a month to open it</span></div>
     </div>
-  )
-}
-
-function RenameDialog({ node, month, onDone, onClose }: { node: TreeNode; month: string; onDone: () => void; onClose: () => void }) {
-  const [name, setName] = useState(node.name)
-  const [everyMonth, setEveryMonth] = useState(true)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const save = async () => {
-    setBusy(true)
-    setError(null)
-    try {
-      await budgetApi.rename(node.path, name.trim(), everyMonth ? undefined : month)
-      onDone()
-      onClose()
-    } catch (err) {
-      setError((err as Error).message)
-      setBusy(false)
-    }
-  }
-  return (
-    <Dialog title={`Rename "${node.name}"`} onClose={onClose}>
-      <form className="budget-form" onSubmit={(e) => { e.preventDefault(); if (name.trim()) void save() }}>
-        <label>
-          <span>New name</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} autoFocus />
-        </label>
-        <label className="budget-check">
-          <span><input type="checkbox" checked={everyMonth} onChange={(e) => setEveryMonth(e.target.checked)} /> In every month (otherwise only {monthTitle(month)})</span>
-        </label>
-        <p className="muted small">Using a name that already exists at this level merges the two.</p>
-        {error && <p className="error-text small">{error}</p>}
-        <div className="dialog-actions">
-          <button type="button" className="button ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" className="button primary" disabled={!name.trim() || name.trim() === node.name || busy}>Rename</button>
-        </div>
-      </form>
-    </Dialog>
   )
 }
 
