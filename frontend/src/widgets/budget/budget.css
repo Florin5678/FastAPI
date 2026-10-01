@@ -113,3 +113,5 @@
 .budget-history.compact .budget-history-bars { gap: 1px; }
 .budget-history.compact .budget-history-bars span { width: 45%; border-radius: 2px 2px 0 0; }
 .budget-history.compact .budget-history-label { font-size: 10px; }
+.budget-history-nav { display: flex; align-items: center; gap: 6px; }
+.budget-history-nav span { min-width: 8.5em; text-align: center; font-weight: 600; }

@@ -102,7 +102,7 @@ export function BudgetPage() {
           </div>
 
           <Budgets data={data} money={money} onSaved={reload} />
-          <History data={data} money={money} onPick={setMonth} thisMonth={thisMonth} />
+          <History data={data} money={money} onPick={setMonth} thisMonth={thisMonth} canGoBack={canGoBack} />
         </>
       )}
 
@@ -334,10 +334,20 @@ function Budgets({ data, money, onSaved }: { data: BudgetMonth; money: Money; on
   )
 }
 
-function History({ data, money, onPick, thisMonth }: { data: BudgetMonth; money: Money; onPick: (m: string) => void; thisMonth: string }) {
+function History({ data, money, onPick, thisMonth, canGoBack }: {
+  data: BudgetMonth; money: Money; onPick: (m: string) => void; thisMonth: string; canGoBack: boolean
+}) {
+  // The chart is the 12 months up to the open month: the arrows move that month
   return (
     <div className="card budget-card">
-      <h3>Last 12 months</h3>
+      <div className="budget-card-head">
+        <h3>Last 12 months</h3>
+        <div className="budget-history-nav">
+          <button type="button" className="icon-button" onClick={() => onPick(shiftMonth(data.month, -1))} disabled={!canGoBack} aria-label="Previous month" title="Previous month">‹</button>
+          <span className="small">{monthTitle(data.month)}</span>
+          <button type="button" className="icon-button" onClick={() => onPick(shiftMonth(data.month, 1))} disabled={data.month >= thisMonth} aria-label="Next month" title="Next month">›</button>
+        </div>
+      </div>
       <MonthChart history={data.history} current={data.month} lastMonth={thisMonth} money={money} onPick={onPick} />
       <div className="budget-legend"><span><i className="budget-history-income" />Income</span><span><i className="budget-history-expenses" />Spent</span><span>Tap a month to open it</span></div>
     </div>
