@@ -5,8 +5,8 @@ import { Dialog } from '../../components/Dialog'
 type Props = { onSaved: () => void; onClose: () => void }
 
 // Everything that goes into the briefing prompt (the same for "Open in Claude", "Copy
-// briefing" and the AI chat): opening text, the extra instructions (answer sections or
-// always-on rules), filters, which widgets are included (and how many items), and the
+// briefing" and the AI chat): opening text, the answer sections, filters, which widgets
+// are included (and how many items), and the
 // question at the end. Saved per user; the server builds the prompt (assistant.py).
 export function AssistantSettingsDialog({ onSaved, onClose }: Props) {
   const [settings, setSettings] = useState<AssistantSettings | null>(null)
@@ -90,13 +90,12 @@ export function AssistantSettingsDialog({ onSaved, onClose }: Props) {
 
           <section>
             <div className="assistant-settings-head">
-              <h3>Extra instructions</h3>
+              <h3>Answer sections</h3>
               <button type="button" className="button ghost small-button" disabled={settings.extras.length >= 30}
                 onClick={() => update({ extras: [...settings.extras, { name: '', text: '', enabled: true }] })}>+ Add</button>
             </div>
             <p className="muted small">
-              Each one becomes a section of Claude's answer, in this order (↑ moves one up). Tick <b>Rule</b> for something
-              Claude must always do or avoid instead (e.g. "DO NOT MENTION"). Untick the first box to switch one off.
+              Each one becomes a section of Claude's answer, in this order (↑ moves one up). Untick the box to switch one off.
             </p>
             <ul className="assistant-extras">
               {settings.extras.map((extra, i) => (
@@ -108,10 +107,6 @@ export function AssistantSettingsDialog({ onSaved, onClose }: Props) {
                       onChange={(e) => setExtra(i, { name: e.target.value })} />
                     <textarea rows={2} value={extra.text} placeholder="What Claude should do" maxLength={600} aria-label="Instruction"
                       onChange={(e) => setExtra(i, { text: e.target.value })} />
-                    <label className="assistant-extra-rule small">
-                      <input type="checkbox" checked={Boolean(extra.rule)} onChange={(e) => setExtra(i, { rule: e.target.checked })} />
-                      Rule (always follow; not a section of the answer)
-                    </label>
                   </div>
                   <button type="button" className="icon-button" aria-label={`Move ${extra.name || 'this instruction'} up`} title="Move up"
                     disabled={i === 0} onClick={() => moveExtra(i)}>↑</button>
@@ -123,7 +118,7 @@ export function AssistantSettingsDialog({ onSaved, onClose }: Props) {
           </section>
 
           <section>
-            <h3>What the briefing includes</h3>
+            <h3>Items loaded per section</h3>
             <p className="muted small">For widgets with a list, choose how many items are sent. Widgets not on your dashboard are never sent; your journal is never included.</p>
             <ul className="assistant-briefing-rules">
               {widgets.map((w) => {

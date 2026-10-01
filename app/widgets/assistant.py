@@ -5,8 +5,8 @@
 # holidays: app/widgets/today.py) and each widget's brief() (widgets without one, like the
 # private journal, are never included), after the user's filters (ignored calendar events,
 # skipped email categories) are applied in code. compose_prompt() turns it into one prompt:
-#   opening -> the briefing data -> "How to answer" (extra instructions as required answer
-#   sections, then always-on rules) -> the question.
+#   opening -> the briefing data -> "How to answer" (the answer sections, then fixed
+#   rules) -> the question.
 # The same prompt is used everywhere: get_briefing in the Claude connector (what "Open in
 # Claude" asks Claude on claude.ai to fetch), "Copy briefing", and the AI chat's system
 # prompt (assistant_chat.py). Claude Pro answers on the user's own subscription.
@@ -60,7 +60,6 @@ class ExtraInstruction(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     text: str = Field(min_length=1, max_length=600)
     enabled: bool = True
-    rule: bool = False  # True: an always-on rule, not a section of the answer
 
 
 class BriefingFilters(BaseModel):
@@ -213,9 +212,9 @@ def render_sections(sections: list[dict]) -> str:
 
 
 def answer_guide(s: AssistantSettings) -> str:
-    """The extra instructions as required answer sections, then the always-on rules."""
+    """The answer sections (the "extras"), then the fixed rules."""
     parts = []
-    sections = [e for e in s.extras if e.enabled and not e.rule]
+    sections = [e for e in s.extras if e.enabled]
     if sections:
         parts.append(
             "Answer with these sections, in this order, each under its name as a heading:\n"
@@ -226,8 +225,7 @@ def answer_guide(s: AssistantSettings) -> str:
             "one short line. If a section asks you to use another connector or tool (e.g. Slack), use it before "
             "answering; if it isn't available to you, say so in that section."
         )
-    rules = [f"- {e.name}: {e.text}" for e in s.extras if e.enabled and e.rule]
-    rules += [
+    rules = [
         "- The Today section (date, week, moon, holidays, sky events) is computed and correct: use it, don't work these out yourself.",
         "- Don't invent facts that aren't in the briefing or a tool result.",
     ]

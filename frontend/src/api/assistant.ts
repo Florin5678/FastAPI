@@ -1,8 +1,8 @@
 // Assistant widget: the prompt settings (edited in the widget's Settings dialog)
 import { json, request } from './client'
 
-// rule: an always-on rule instead of a section of the answer
-export type ExtraInstruction = { name: string; text: string; enabled: boolean; rule?: boolean }
+// One answer section ("Answer sections" in the Settings dialog)
+export type ExtraInstruction = { name: string; text: string; enabled: boolean }
 
 // Applied on the server before Claude sees anything
 export type BriefingFilters = {
