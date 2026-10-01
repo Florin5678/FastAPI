@@ -47,15 +47,16 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     this_week = _week_start(today)
     first_week = this_week - timedelta(weeks=WEEKS_SHOWN - 1)
 
-    per_day = (
-        db.query(Workout.day, func.count(Workout.id))
+    # The weekly goal counts active days (days with at least one workout), not workouts
+    trained_days = (
+        db.query(Workout.day)
         .filter(Workout.user_id == user.id, Workout.day >= first_week)
-        .group_by(Workout.day)
+        .distinct()
         .all()
     )
     week_counts: dict[date, int] = {}
-    for day, n in per_day:
-        week_counts[_week_start(day)] = week_counts.get(_week_start(day), 0) + n
+    for (day,) in trained_days:
+        week_counts[_week_start(day)] = week_counts.get(_week_start(day), 0) + 1
 
     workouts = (
         db.query(Workout)
@@ -63,7 +64,7 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
         .order_by(Workout.day.desc(), Workout.created_at.desc())
         .all()
     )
-    goal = settings["goal_workouts"]
+    goal = settings["goal_workouts"]  # (key kept from when the goal counted workouts) active days per week
     done_days = {w.day for w in workouts}
 
     def count(week: date) -> int:
@@ -80,8 +81,9 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     return {
         "today": today.isoformat(),
         "week_start": this_week.isoformat(),
-        "goal_workouts": goal,
+        "goal_active_days": goal,
         "goal_minutes": settings["goal_minutes"],
+        "active_days": len(done_days),
         "workouts_done": len(workouts),
         "minutes_done": sum(w.minutes for w in workouts),
         "days": [
@@ -90,7 +92,7 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
         ],
         "weeks": [
             {"week_start": (first_week + timedelta(weeks=i)).isoformat(),
-             "workouts": week_counts.get(first_week + timedelta(weeks=i), 0)}
+             "active_days": week_counts.get(first_week + timedelta(weeks=i), 0)}
             for i in range(WEEKS_SHOWN)
         ],
         "streak_weeks": streak,
@@ -106,8 +108,9 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
 
 
 def _week_count(db: Session, user: User, week: date) -> int:
+    """Active days in the week starting `week`."""
     return (
-        db.query(func.count(Workout.id))
+        db.query(func.count(func.distinct(Workout.day)))
         .filter(Workout.user_id == user.id, Workout.day >= week, Workout.day < week + timedelta(days=7))
         .scalar()
     )
@@ -115,8 +118,8 @@ def _week_count(db: Session, user: User, week: date) -> int:
 
 def brief(data: dict, limit: int | None = None) -> str:
     line = (
-        f"This week: {data['workouts_done']} of {data['goal_workouts']} workouts, "
-        f"{data['minutes_done']} of {data['goal_minutes']} minutes."
+        f"This week: {data['active_days']} of {data['goal_active_days']} active days (days with a workout; "
+        f"{data['workouts_done']} workouts in total), {data['minutes_done']} of {data['goal_minutes']} minutes."
     )
     if data["streak_weeks"]:
         line += f" Streak: {data['streak_weeks']} week(s) meeting the goal."
@@ -148,7 +151,7 @@ register(WidgetDefinition(
     refresh_seconds=900,
     enabled_by_default=True,
     config_fields=(
-        ConfigField("goal_workouts", "Workouts per week", "number", default=4, min=1, max=14),
+        ConfigField("goal_workouts", "Active days per week", "number", default=4, min=1, max=7),
         ConfigField("goal_minutes", "Minutes per week", "number", default=300, min=0, max=3000),
     ),
 ))
@@ -221,6 +224,61 @@ def delete_workout(workout_id: int, user: User = Depends(get_current_user), db: 
     return {"deleted": workout_id}
 
 
+@router.get("/stats")
+def stats(
+    level: str,  # "week" | "month" | "year"
+    anchor: date,  # any day in the period
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Minutes per workout type for one week, month or year (for the Gym page's chart):
+    the totals, and the same split over time (days of the week, weeks of the month,
+    months of the year)."""
+    widget_row(db, user, WIDGET_ID)
+    if level == "week":
+        start = _week_start(anchor)
+        end = start + timedelta(days=7)
+        buckets = [(start + timedelta(days=i), start + timedelta(days=i + 1)) for i in range(7)]
+        label = f"Week {start.isocalendar().week} · {start:%d %b} – {end - timedelta(days=1):%d %b %Y}"
+        bucket_label = lambda b: f"{b:%a %d}"  # noqa: E731
+    elif level == "month":
+        start = anchor.replace(day=1)
+        end = date(start.year + (start.month == 12), start.month % 12 + 1, 1)
+        buckets, week = [], _week_start(start)
+        while week < end:  # weeks clipped to the month, so they add up to the month
+            buckets.append((max(week, start), min(week + timedelta(days=7), end)))
+            week += timedelta(days=7)
+        label = f"{start:%B %Y}"
+        bucket_label = lambda b: f"W{b.isocalendar().week}"  # noqa: E731
+    elif level == "year":
+        start, end = date(anchor.year, 1, 1), date(anchor.year + 1, 1, 1)
+        buckets = [(date(anchor.year, m, 1), date(anchor.year + (m == 12), m % 12 + 1, 1)) for m in range(1, 13)]
+        label = str(anchor.year)
+        bucket_label = lambda b: f"{b:%b}"  # noqa: E731
+    else:
+        raise HTTPException(status_code=422, detail="level must be week, month or year")
+
+    workouts = db.query(Workout).filter(Workout.user_id == user.id, Workout.day >= start, Workout.day < end).all()
+    totals: dict[str, dict] = {}
+    columns = [{"label": bucket_label(b_start), "start": b_start.isoformat(), "minutes": {}} for b_start, _ in buckets]
+    for w in workouts:
+        t = totals.setdefault(w.kind, {"kind": w.kind, "sessions": 0, "minutes": 0})
+        t["sessions"] += 1
+        t["minutes"] += w.minutes
+        i = next(i for i, (b_start, b_end) in enumerate(buckets) if b_start <= w.day < b_end)
+        columns[i]["minutes"][w.kind] = columns[i]["minutes"].get(w.kind, 0) + w.minutes
+    return {
+        "level": level,
+        "label": label,
+        "start": start.isoformat(),
+        "end": (end - timedelta(days=1)).isoformat(),
+        "totals": sorted(totals.values(), key=lambda t: -t["minutes"]),
+        "columns": columns,
+        "active_days": len({w.day for w in workouts}),
+        "kinds": load_routines(),  # fixed order, so each type keeps its chart colour
+    }
+
+
 @router.get("/month")
 def month_report(
     month: str,  # "YYYY-MM"
@@ -255,10 +313,15 @@ def month_report(
     weeks: dict[date, dict] = {}
     week = weeks_from
     while week < weeks_to:
-        weeks[week] = {"week_start": week.isoformat(), "week": week.isocalendar().week, "sessions": 0, "minutes": 0, "kinds": {}}
+        weeks[week] = {"week_start": week.isoformat(), "week": week.isocalendar().week, "active_days": 0,
+                       "sessions": 0, "minutes": 0, "kinds": {}}
         week += timedelta(weeks=1)
+    active: set[date] = set()
     for w in db.query(Workout).filter(Workout.user_id == user.id, Workout.day >= weeks_from, Workout.day < weeks_to):
         t = weeks[_week_start(w.day)]
+        if w.day not in active:
+            active.add(w.day)
+            t["active_days"] += 1
         t["sessions"] += 1
         t["minutes"] += w.minutes
         t["kinds"][w.kind] = t["kinds"].get(w.kind, 0) + 1
@@ -269,7 +332,7 @@ def month_report(
         "month": month,
         "days": days,
         "weeks": list(weeks.values()),
-        "goal_workouts": goals["goal_workouts"],
+        "goal_active_days": goals["goal_workouts"],
         "goal_minutes": goals["goal_minutes"],
         "totals": sorted(totals.values(), key=lambda t: -t["minutes"]),
         "sessions": len(workouts),

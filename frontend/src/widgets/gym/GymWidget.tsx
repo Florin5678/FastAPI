@@ -6,12 +6,13 @@ import './gym.css'
 export type GymData = {
   today: string
   week_start: string
-  goal_workouts: number
+  goal_active_days: number // weekly goal: days with at least one workout
   goal_minutes: number
+  active_days: number
   workouts_done: number
   minutes_done: number
   days: { day: string; trained: boolean }[]
-  weeks: { week_start: string; workouts: number }[]
+  weeks: { week_start: string; active_days: number }[]
   streak_weeks: number
   workouts: Workout[]
   kinds: string[]
@@ -72,7 +73,7 @@ export function GymWidget({ data, reload, actions }: WidgetProps<GymData>) {
     }
   }
 
-  const maxWeek = Math.max(data.goal_workouts, ...data.weeks.map((w) => w.workouts))
+  const maxWeek = Math.max(data.goal_active_days, ...data.weeks.map((w) => w.active_days))
 
   return (
     <div className="gym-widget">
@@ -105,7 +106,7 @@ export function GymWidget({ data, reload, actions }: WidgetProps<GymData>) {
       )}
       {error && <p className="error-text small">{error}</p>}
 
-      <GoalBar label="Workouts" done={data.workouts_done} goal={data.goal_workouts} unit="" />
+      <GoalBar label="Active days" done={data.active_days} goal={data.goal_active_days} unit="" />
       <GoalBar label="Minutes" done={data.minutes_done} goal={data.goal_minutes} unit="min" />
 
       <div className="gym-week" aria-label="Days trained this week">
@@ -120,15 +121,15 @@ export function GymWidget({ data, reload, actions }: WidgetProps<GymData>) {
         ))}
       </div>
 
-      <div className="gym-weeks" aria-label="Workouts per week, last 8 weeks">
+      <div className="gym-weeks" aria-label="Active days per week, last 8 weeks">
         {data.weeks.map((w, i) => {
-          const met = w.workouts >= data.goal_workouts
+          const met = w.active_days >= data.goal_active_days
           return (
-            <span key={w.week_start} className="gym-week-col" title={`Week of ${new Date(w.week_start + 'T12:00').toLocaleDateString([], { day: 'numeric', month: 'short' })}: ${w.workouts} workout${w.workouts === 1 ? '' : 's'}`}>
+            <span key={w.week_start} className="gym-week-col" title={`Week of ${new Date(w.week_start + 'T12:00').toLocaleDateString([], { day: 'numeric', month: 'short' })}: ${w.active_days} active day${w.active_days === 1 ? '' : 's'}`}>
               <span className="gym-week-bar">
-                <span className={met ? 'gym-week-fill met' : 'gym-week-fill'} style={{ height: `${(w.workouts / maxWeek) * 100}%` }} />
+                <span className={met ? 'gym-week-fill met' : 'gym-week-fill'} style={{ height: `${(w.active_days / maxWeek) * 100}%` }} />
               </span>
-              <span className="gym-week-label">{i === data.weeks.length - 1 ? 'now' : w.workouts}</span>
+              <span className="gym-week-label">{i === data.weeks.length - 1 ? 'now' : w.active_days}</span>
             </span>
           )
         })}

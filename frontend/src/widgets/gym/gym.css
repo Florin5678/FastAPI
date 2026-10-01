@@ -68,3 +68,49 @@
   .gym-month-entry { font-size: 10px; padding: 1px 3px; white-space: normal; overflow-wrap: anywhere; }
   .gym-month-time { display: none; } /* narrow cells: routine name only (details on tap / in totals) */
 }
+
+/* Gym chart (GymChart.tsx): categorical palette validated with the dataviz validator
+   (light vs #ffffff, dark vs #181a22); one slot per workout type in routine order */
+.gym-series-1 { --series: #2a78d6; }
+.gym-series-2 { --series: #eb6834; }
+.gym-series-3 { --series: #1baf7a; }
+.gym-series-4 { --series: #eda100; }
+.gym-series-5 { --series: #e87ba4; }
+.gym-series-6 { --series: #008300; }
+.gym-series-7 { --series: #4a3aa7; }
+.gym-series-8 { --series: #e34948; }
+@media (prefers-color-scheme: dark) {
+  .gym-series-1 { --series: #3987e5; }
+  .gym-series-2 { --series: #d95926; }
+  .gym-series-3 { --series: #199e70; }
+  .gym-series-4 { --series: #c98500; }
+  .gym-series-5 { --series: #d55181; }
+  .gym-series-6 { --series: #008300; }
+  .gym-series-7 { --series: #9085e9; }
+  .gym-series-8 { --series: #e66767; }
+}
+.gym-chart { display: flex; flex-direction: column; gap: 12px; }
+.gym-chart-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.gym-chart-nav { display: flex; align-items: center; gap: 6px; }
+.gym-chart-label { font-weight: 600; font-size: 14px; min-width: 9em; text-align: center; }
+.gym-chart-summary { margin: 0; }
+.gym-chart-body { display: flex; flex-direction: column; gap: 14px; }
+.gym-chart-body.pie { flex-direction: row; align-items: center; gap: 28px; }
+.gym-pie { flex-shrink: 0; }
+.gym-pie circle { stroke: var(--series); }
+.gym-pie-total { font-size: 15px; font-weight: 650; fill: var(--text); }
+.gym-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
+.gym-legend li { display: grid; grid-template-columns: 12px 1fr auto; align-items: center; gap: 8px; font-size: 14px; }
+.gym-swatch { width: 12px; height: 12px; border-radius: 3px; background: var(--series); }
+.gym-legend-kind { font-weight: 600; }
+.gym-columns { display: flex; align-items: stretch; gap: 6px; height: 200px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+.gym-column { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.gym-column-track { flex: 1; width: 100%; max-width: 44px; display: flex; align-items: flex-end; }
+.gym-column-stack { width: 100%; display: flex; flex-direction: column-reverse; gap: 2px; border-radius: 4px 4px 0 0; overflow: hidden; }
+.gym-column-seg { background: var(--series); min-height: 2px; flex-basis: 0; }
+.gym-column-label { font-size: 11px; color: var(--muted); white-space: nowrap; transform: translateY(18px); }
+.gym-columns { margin-bottom: 20px; }
+@media (max-width: 640px) {
+  .gym-chart-body.pie { flex-direction: column; }
+  .gym-chart-controls { justify-content: center; }
+}

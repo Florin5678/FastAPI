@@ -222,7 +222,7 @@ def get_workouts(month: Optional[str] = None) -> dict:
     with _Call() as call:
         week = _widget(call, "gym")
         return {
-            "this_week": {k: week[k] for k in ("week_start", "goal_workouts", "goal_minutes", "workouts_done", "minutes_done", "streak_weeks")},
+            "this_week": {k: week[k] for k in ("week_start", "goal_active_days", "active_days", "goal_minutes", "workouts_done", "minutes_done", "streak_weeks")},
             "workout_types": week["kinds"],
             "month": _run(gym.month_report, _month(month), user=call.user, db=call.db),
         }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { gymApi, localDate, type GymMonth } from '../../api'
+import { GymChart } from './GymChart'
 import './gym.css'
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -111,7 +112,7 @@ export function GymPage() {
 
           <div className="section-head history-head">
             <h2>Weekly totals</h2>
-            <span className="muted small">Goal: {data.goal_workouts} workouts · {duration(data.goal_minutes)} a week</span>
+            <span className="muted small">Goal: {data.goal_active_days} active days · {duration(data.goal_minutes)} a week</span>
           </div>
           <ul className="gym-weekly card">
             {data.weeks.map((w) => {
@@ -120,8 +121,8 @@ export function GymPage() {
               const range = `${startDay.toLocaleDateString([], { day: 'numeric', month: 'short' })} – ${endDay.toLocaleDateString([], { day: 'numeric', month: 'short' })}`
               const isCurrent = w.week_start <= today && today < localDate(new Date(endDay.getTime() + 86400000))
               const future = w.week_start > today
-              const met = w.sessions >= data.goal_workouts && w.minutes >= data.goal_minutes
-              const ratio = data.goal_minutes ? w.minutes / data.goal_minutes : w.sessions / Math.max(1, data.goal_workouts)
+              const met = w.active_days >= data.goal_active_days && w.minutes >= data.goal_minutes
+              const ratio = data.goal_minutes ? w.minutes / data.goal_minutes : w.active_days / Math.max(1, data.goal_active_days)
               const kinds = Object.entries(w.kinds).sort((a, b) => b[1] - a[1]).map(([k, n]) => (n > 1 ? `${k} ×${n}` : k)).join(', ')
               return (
                 <li key={w.week_start} className={future ? 'muted' : ''}>
@@ -133,13 +134,18 @@ export function GymPage() {
                     <span className={`bar-fill ${met ? 'done' : 'progress'}`} style={{ width: `${Math.min(ratio, 1) * 100}%` }} />
                   </span>
                   <span className="small gym-totals-value">
-                    {w.sessions}/{data.goal_workouts} workouts · {duration(w.minutes)}{met && ' ✓'}
+                    {w.active_days}/{data.goal_active_days} active days · {w.sessions} workout{w.sessions === 1 ? '' : 's'} · {duration(w.minutes)}{met && ' ✓'}
                   </span>
                   {kinds && <span className="muted small gym-weekly-kinds">{kinds}</span>}
                 </li>
               )
             })}
           </ul>
+
+          <div className="section-head history-head">
+            <h2>Totals by type</h2>
+          </div>
+          <GymChart />
         </>
       )}
     </section>
