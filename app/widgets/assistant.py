@@ -12,13 +12,11 @@
 # prompt (assistant_chat.py). Claude Pro answers on the user's own subscription.
 #
 # What goes into the prompt is edited in the widget's Settings dialog and stored in the
-# widget's row (config["assistant"]). content/assistant_prompt.md only provides the
-# starting values until the settings are first saved.
+# widget's row (config["assistant"]); default_settings() is used until they're first saved.
 import logging
 import os
 import re
 from datetime import datetime, time, timezone
-from pathlib import Path
 from typing import Optional, Union, get_args
 from zoneinfo import ZoneInfo
 
@@ -36,8 +34,7 @@ from app.widgets.today import today_section
 WIDGET_ID = "assistant"
 logger = logging.getLogger(__name__)
 
-# Starting values (used until the user saves the Assistant settings)
-PROMPT_FILE = Path(__file__).resolve().parents[2] / "content" / "assistant_prompt.md"
+# Fallbacks when the opening or question is left empty
 PROMPT_DEFAULTS = {
     "instructions": "Here is my personal dashboard briefing for {when}. Use it as context.",
     "default question": "Give me a short overview of my day and three practical suggestions.",
@@ -81,52 +78,20 @@ class AssistantSettings(BaseModel):
     monthly_budget: float = Field(5.0, ge=0, le=200)  # USD; 0 = chat off
 
 
-def _sections(markdown: str) -> dict[str, str]:
-    """{"heading in lowercase": "text under it"} for each "## " heading."""
-    sections: dict[str, list[str]] = {}
-    current = None
-    for line in markdown.splitlines():
-        if line.startswith("## "):
-            current = line[3:].strip().lower()
-            sections[current] = []
-        elif current is not None:
-            sections[current].append(line)
-    return {name: "\n".join(lines).strip() for name, lines in sections.items()}
-
-
-def defaults_from_file() -> AssistantSettings:
-    """Starting settings from content/assistant_prompt.md (its old format: "- [x] Name:
-    instruction" lines and "- Widget name: N | on | off" lines)."""
-    try:
-        parts = _sections(PROMPT_FILE.read_text(encoding="utf-8"))
-    except OSError:
-        parts = {}
-    extras = []
-    for line in parts.get("extra instructions", "").splitlines():
-        line = line.strip()
-        box = line[:5].lower()
-        if box not in ("- [x]", "- [ ]"):
-            continue
-        name, _, text = line[5:].partition(":")
-        if name.strip() and text.strip():
-            extras.append(ExtraInstruction(name=name.strip()[:80], text=text.strip()[:600], enabled=box == "- [x]"))
-    by_name = {d.name.lower(): d.id for d in REGISTRY.values()}
-    briefing: dict[str, Union[int, str]] = {}
-    for line in parts.get("briefing", "").splitlines():
-        if not line.startswith("- ") or ":" not in line:
-            continue
-        name, _, value = line[2:].rpartition(":")
-        widget_id = by_name.get(name.strip().lower()) or (name.strip() if name.strip() in REGISTRY else None)
-        value = value.strip().lower()
-        if widget_id and value in ("on", "off"):
-            briefing[widget_id] = value
-        elif widget_id and value.isdigit() and 0 < int(value) <= MAX_ITEMS:
-            briefing[widget_id] = int(value)
+def default_settings() -> AssistantSettings:
+    """Starting settings, until the user saves their own in the Settings dialog."""
     return AssistantSettings(
-        instructions=parts.get("instructions") or PROMPT_DEFAULTS["instructions"],
-        default_question=parts.get("default question") or PROMPT_DEFAULTS["default question"],
-        extras=extras[:MAX_EXTRAS],
-        briefing=briefing,
+        instructions="Here is my personal dashboard briefing for {when}. Use it as context.",
+        default_question="Brief me.",
+        extras=[
+            ExtraInstruction(name="Daily forecast", text="The day, week number, weather, moon phase and any holidays "
+                             "or sky events (see Today), and my calendar events for today and the coming days."),
+            ExtraInstruction(name="Email", text="Which emails are important and which need a reply today."),
+            ExtraInstruction(name="Urgent tasks", text="Which reminders are overdue or due soon (see Notes & reminders)."),
+            ExtraInstruction(name="Health", text="Meal and workout suggestions based on what I've eaten and trained "
+                             "recently (see Nutrition and Gym)."),
+            ExtraInstruction(name="News digest", text="The few most important headlines (see News)."),
+        ],
     )
 
 
@@ -145,7 +110,7 @@ def load_settings(db: Session, user: User) -> AssistantSettings:
             return settings
         except ValueError:
             logger.warning("Assistant settings for user %s are invalid; using defaults", user.id)
-    return defaults_from_file()
+    return default_settings()
 
 
 def _words(text: str) -> list[str]:

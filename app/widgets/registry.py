@@ -54,7 +54,7 @@ class WidgetContext:
 FetchFn = Callable[[Session, User, dict, WidgetContext], dict]
 # (data returned by fetch, max items or None for the widget's default) -> a few
 # plain-text lines for the Assistant's daily briefing. Widgets without a list ignore
-# the limit. Limits come from the "## Briefing" section of content/assistant_prompt.md.
+# the limit. Limits are set per widget in the Assistant's Settings dialog.
 BriefFn = Callable[[dict, Optional[int]], str]
 
 
