@@ -37,8 +37,13 @@ logger = logging.getLogger(__name__)
 # Fallbacks when the opening or question is left empty
 PROMPT_DEFAULTS = {
     "instructions": "Here is my personal dashboard briefing for {when}. Use it as context.",
-    "default question": "Give me a short overview of my day and three practical suggestions.",
 }
+# What "Open in Claude" pre-fills on claude.ai (editable in Settings as "Claude prompt"):
+# Claude then fetches the full briefing itself through the connector's get_briefing
+DEFAULT_CLAUDE_PROMPT = (
+    'Brief me. First call get_briefing from my "My Dashboard" connector, then answer exactly as its '
+    '"How to answer" part says. If you can\'t use that connector here, tell me to switch it on for this chat.'
+)
 # How many items a widget's brief() sends by default (widgets not listed have no list)
 DEFAULT_LIMITS = {"email_summary": 15, "calendar": 25, "news": 3, "notes": 15, "nutrition": 10}
 ITEM_LABELS = {"news": "headlines per topic", "calendar": "events", "email_summary": "emails", "notes": "reminders/notes",
@@ -68,7 +73,7 @@ class BriefingFilters(BaseModel):
 
 class AssistantSettings(BaseModel):
     instructions: str = Field(max_length=3000)
-    default_question: str = Field(max_length=1000)
+    claude_prompt: str = Field(DEFAULT_CLAUDE_PROMPT, max_length=2000)  # what "Open in Claude" sends
     extras: list[ExtraInstruction] = Field(default_factory=list, max_length=MAX_EXTRAS)
     # widget id -> "on" | "off" | number of items; widgets not listed are included as usual
     briefing: dict[str, Union[int, str]] = Field(default_factory=dict)
@@ -82,7 +87,6 @@ def default_settings() -> AssistantSettings:
     """Starting settings, until the user saves their own in the Settings dialog."""
     return AssistantSettings(
         instructions="Here is my personal dashboard briefing for {when}. Use it as context.",
-        default_question="Brief me.",
         extras=[
             ExtraInstruction(name="Daily forecast", text="The day, week number, weather, moon phase and any holidays "
                              "or sky events (see Today), and my calendar events for today and the coming days."),
@@ -201,10 +205,9 @@ def answer_guide(s: AssistantSettings) -> str:
 def compose_prompt(s: AssistantSettings, sections: list[dict]) -> str:
     """The whole prompt; "{when}" is left for the caller to fill with the current time."""
     opening = s.instructions.strip() or PROMPT_DEFAULTS["instructions"]
-    question = s.default_question.strip() or PROMPT_DEFAULTS["default question"]
     return (
         f"{opening}\n\n# My dashboard briefing\n\n{render_sections(sections)}\n\n"
-        f"# How to answer\n\n{answer_guide(s)}\n\n# My question\n\n{question}"
+        f"# How to answer\n\n{answer_guide(s)}\n\n# My question\n\n{s.claude_prompt.strip() or DEFAULT_CLAUDE_PROMPT}"
     )
 
 
@@ -217,7 +220,8 @@ def fill_when(prompt: str, tz: Optional[str] = None) -> str:
 def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     prefs = load_settings(db, user)
     sections = briefing_sections(db, user, ctx, prefs)
-    return {"sections": sections, "prompt": compose_prompt(prefs, sections)}
+    return {"sections": sections, "prompt": compose_prompt(prefs, sections),
+            "claude_prompt": prefs.claude_prompt.strip() or DEFAULT_CLAUDE_PROMPT}
 
 
 register(WidgetDefinition(

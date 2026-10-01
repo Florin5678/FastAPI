@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { WidgetProps } from '../types'
 import { AssistantSettingsDialog } from './AssistantSettingsDialog'
 import { ChatPanel } from './ChatPanel'
-import { fillWhen, OPEN_IN_CLAUDE_PROMPT, type AssistantData } from './prompt'
+import { fillWhen, type AssistantData } from './prompt'
 import './assistant.css'
 
 export type { AssistantData } from './prompt'
@@ -21,10 +21,10 @@ export function AssistantWidget({ data, actions, reload }: WidgetProps<Assistant
     }
   }
 
-  // claude.ai fetches the full briefing itself through the connector (see prompt.ts)
+  // The "Claude prompt" from Settings; by default it asks Claude to fetch the briefing via the connector
   const openInClaude = () => {
     // Open synchronously (inside the click) so pop-up blockers allow it
-    window.open(`https://claude.ai/new?q=${encodeURIComponent(OPEN_IN_CLAUDE_PROMPT)}`, '_blank', 'noopener')
+    window.open(`https://claude.ai/new?q=${encodeURIComponent(data.claude_prompt)}`, '_blank', 'noopener')
     setNote('Opened Claude: it fetches your full briefing through the My Dashboard connector (switch it on in that chat if asked).')
   }
 

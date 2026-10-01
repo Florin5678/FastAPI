@@ -7,7 +7,7 @@ type Props = { onSaved: () => void; onClose: () => void }
 // Everything that goes into the briefing prompt (the same for "Open in Claude", "Copy
 // briefing" and the AI chat): opening text, the answer sections, filters, which widgets
 // are included (and how many items), and the
-// question at the end. Saved per user; the server builds the prompt (assistant.py).
+// Claude prompt (what "Open in Claude" sends). Saved per user; the server builds the prompt (assistant.py).
 export function AssistantSettingsDialog({ onSaved, onClose }: Props) {
   const [settings, setSettings] = useState<AssistantSettings | null>(null)
   const [widgets, setWidgets] = useState<BriefingWidget[]>([])
@@ -178,10 +178,10 @@ export function AssistantSettingsDialog({ onSaved, onClose }: Props) {
           </section>
 
           <section>
-            <h3>Question</h3>
-            <p className="muted small">What "Open in Claude" asks at the end.</p>
-            <input type="text" value={settings.default_question} maxLength={1000}
-              onChange={(e) => update({ default_question: e.target.value })} aria-label="Question" />
+            <h3>Claude prompt</h3>
+            <p className="muted small">What "Open in Claude" asks.</p>
+            <textarea rows={3} value={settings.claude_prompt} maxLength={2000}
+              onChange={(e) => update({ claude_prompt: e.target.value })} aria-label="Claude prompt" />
           </section>
 
           <section>
