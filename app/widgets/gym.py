@@ -20,6 +20,7 @@ WIDGET_ID = "gym"
 # Edit the workout types in content/gym_routines.md (repo root)
 ROUTINES_FILE = Path(__file__).resolve().parents[2] / "content" / "gym_routines.md"
 _routines_cache: dict = {"mtime": None, "routines": []}
+RECENT_DAYS = 14  # workouts listed in the Assistant's briefing
 WEEKS_SHOWN = 8
 
 
@@ -95,6 +96,12 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
         "streak_weeks": streak,
         "workouts": [_workout_dict(w) for w in workouts],
         "kinds": load_routines(),
+        # For the Assistant's briefing
+        "recent": [
+            _workout_dict(w) for w in db.query(Workout)
+            .filter(Workout.user_id == user.id, Workout.day >= today - timedelta(days=RECENT_DAYS - 1), Workout.day <= today)
+            .order_by(Workout.day.desc(), Workout.created_at.desc())
+        ],
     }
 
 
@@ -113,7 +120,21 @@ def brief(data: dict, limit: int | None = None) -> str:
     )
     if data["streak_weeks"]:
         line += f" Streak: {data['streak_weeks']} week(s) meeting the goal."
-    return line
+    lines = [line]
+    recent = data.get("recent", [])
+    today = date.fromisoformat(data["today"])
+    if recent:
+        lines.append(f"Workouts in the last {RECENT_DAYS} days (newest first):")
+        lines += [f"- {date.fromisoformat(w['day']):%a %d %b}: {w['kind']}, {w['minutes']} min" + (f" ({w['note']})" if w["note"] else "")
+                  for w in recent]
+    else:
+        lines.append(f"No workouts in the last {RECENT_DAYS} days.")
+    last: dict[str, int] = {}
+    for w in recent:
+        last.setdefault(w["kind"], (today - date.fromisoformat(w["day"])).days)
+    lines.append("Days since each workout type was last trained: " + ", ".join(
+        f"{k} {last[k]}" if k in last else f"{k} {RECENT_DAYS}+" for k in data["kinds"]))
+    return "\n".join(lines)
 
 
 register(WidgetDefinition(

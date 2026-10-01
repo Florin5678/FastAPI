@@ -67,14 +67,36 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     return {"reminders": open_, "done": done, "notes": notes}
 
 
+def _due_text(due: str, now: datetime) -> str:
+    moment = datetime.fromisoformat(due)
+    local = moment.astimezone(now.tzinfo)
+    if moment < now:
+        return f"OVERDUE since {local:%a %d %b %H:%M}"
+    if local.date() == now.date():
+        return f"due today {local:%H:%M}"
+    return f"due {local:%a %d %b %H:%M}"
+
+
 def brief(data: dict, limit: int | None = None) -> str:
+    now = datetime.now(timezone.utc).astimezone()
+    count = limit or 15
     if not data["reminders"]:
         lines = ["No open reminders."]
     else:
-        lines = ["Open reminders:"]
-        for r in data["reminders"][:limit or 10]:
-            lines.append(f"- {r['text']}" + (f" (due {r['due']})" if r["due"] else ""))
-    lines.append(f"{len(data['notes'])} note(s).")
+        lines = [f"Open reminders ({len(data['reminders'])}, soonest due first):"]
+        for r in data["reminders"][:count]:
+            lines.append(f"- {r['text']}" + (f" ({_due_text(r['due'], now)})" if r["due"] else " (no due date)"))
+        if len(data["reminders"]) > count:
+            lines.append(f"(+{len(data['reminders']) - count} more open reminders)")
+    if data.get("done"):
+        lines.append("Recently completed: " + "; ".join(r["text"] for r in data["done"][:5]))
+    if data["notes"]:
+        lines.append(f"Notes ({len(data['notes'])}, pinned first):")
+        for n in data["notes"][:count]:
+            text = " ".join((n.get("text") or "").split())
+            lines.append(f"- {'[pinned] ' if n.get('pinned') else ''}{text[:300]}")
+    else:
+        lines.append("No notes.")
     return "\n".join(lines)
 
 

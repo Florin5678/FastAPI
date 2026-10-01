@@ -156,8 +156,22 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
 
 
 def brief(data: dict, limit: int | None = None) -> str:
-    lines = [f"Latest {data['topic']} headlines:"]
-    lines += [f"- {i['title']} ({i['source']})" for i in data["items"][:limit or 6]]
+    """The newest `limit` headlines per topic (the Assistant fetches every topic), with a
+    short excerpt so Claude can judge what matters."""
+    per_topic = limit or 3
+    groups: dict[str, list] = {}
+    for item in data["items"]:
+        group = groups.setdefault(item.get("topic") or data["topic"], [])
+        if len(group) < per_topic:
+            group.append(item)
+    lines = [f"Newest headlines per topic ({per_topic} each), as title (source) - excerpt:"]
+    for topic, items in groups.items():
+        lines.append(f"{topic}:")
+        for i in items:
+            excerpt = (i.get("excerpt") or "").strip()
+            lines.append(f"- {i['title']} ({i['source']})" + (f" - {excerpt[:200]}" if excerpt else ""))
+    if data.get("unavailable"):
+        lines.append(f"(Feeds not reachable right now: {', '.join(data['unavailable'])})")
     return "\n".join(lines)
 
 

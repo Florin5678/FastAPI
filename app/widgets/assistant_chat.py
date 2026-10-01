@@ -33,8 +33,8 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.mail.summarize import get_client
 from app.models import ConnectorChange, User
+from app.widgets import assistant
 from app.widgets.assistant import WIDGET_ID, _row, load_settings
-from app.widgets.registry import REGISTRY
 
 logger = logging.getLogger(__name__)
 
@@ -91,11 +91,19 @@ def _add_usage(db: Session, user: User, model: str, usage) -> float:
 
 
 def _briefing(db: Session, user: User) -> str:
+    """The briefing data and the user's answer guide (the same builder as get_briefing and
+    "Copy briefing", see assistant.py), for the system prompt."""
     cached = _briefings.get(user.id)
     if cached and time.time() - cached[0] < BRIEFING_CACHE_SECONDS:
         return cached[1]
-    data = REGISTRY[WIDGET_ID].fetch(db, user, {}, _ctx())
-    text = "\n\n".join(f"## {s['name']}\n{s['text']}" for s in data["sections"]) or "(no widgets on the dashboard yet)"
+    prefs = assistant.load_settings(db, user)
+    sections = assistant.briefing_sections(db, user, _ctx(), prefs)
+    text = (
+        f"# The user's dashboard right now\n\n{assistant.render_sections(sections)}\n\n"
+        "# When the user asks for a briefing (\"brief me\", \"my day\", \"morning update\"...)\n\n"
+        f"{assistant.answer_guide(prefs)}\n\n"
+        "The rules above apply to every answer, not only briefings."
+    )
     _briefings[user.id] = (time.time(), text)
     return text
 
@@ -106,9 +114,10 @@ def _system(db: Session, user: User) -> list[dict]:
         + INSTRUCTIONS
         + " Use the briefing below first; call tools for details it doesn't have (full emails, other days or "
         "months, ids needed for changes). When you change something, say what you changed. Ask before deleting "
-        "anything unless the user clearly asked for it. Amounts of money are in the user's currency (kr)."
+        "anything unless the user clearly asked for it. Amounts of money are in the user's currency (kr). "
+        "The chat shows plain text: no Markdown headings, tables or bold; write section names as plain lines."
     )
-    cached = f"{rules}\n\n# The user's dashboard right now\n\n{_briefing(db, user)}"
+    cached = f"{rules}\n\n{_briefing(db, user)}"
     now = datetime.now(ZoneInfo(TIMEZONE)).strftime("%A %d %B %Y, %H:%M")
     return [
         {"type": "text", "text": cached, "cache_control": {"type": "ephemeral"}},

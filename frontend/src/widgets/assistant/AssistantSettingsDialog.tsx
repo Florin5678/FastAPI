@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react'
 import { assistantApi, type AssistantSettings, type BriefingWidget, type ChatModel, type ChatUsage } from '../../api'
 import { Dialog } from '../../components/Dialog'
-import { buildPrompt, composeInstructions, type AssistantData } from './prompt'
 
-type Props = { data: AssistantData; onSaved: () => void; onClose: () => void }
+type Props = { onSaved: () => void; onClose: () => void }
 
-// Everything that goes into the prompt "Open in Claude" / "Copy briefing" send to Claude:
-// opening text, extra instructions (switchable), which widgets
-// are included (and how many items), and the question at the end. Saved per user.
-export function AssistantSettingsDialog({ data, onSaved, onClose }: Props) {
+// Everything that goes into the briefing prompt (the same for "Open in Claude", "Copy
+// briefing" and the AI chat): opening text, the extra instructions (answer sections or
+// always-on rules), filters, which widgets are included (and how many items), and the
+// question at the end. Saved per user; the server builds the prompt (assistant.py).
+export function AssistantSettingsDialog({ onSaved, onClose }: Props) {
   const [settings, setSettings] = useState<AssistantSettings | null>(null)
   const [widgets, setWidgets] = useState<BriefingWidget[]>([])
+  const [emailCategories, setEmailCategories] = useState<string[]>([])
+  const [preview, setPreview] = useState<string | null>(null)
+  const [previewing, setPreviewing] = useState(false)
   const [models, setModels] = useState<ChatModel[]>([])
   const [usage, setUsage] = useState<ChatUsage | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -19,7 +22,7 @@ export function AssistantSettingsDialog({ data, onSaved, onClose }: Props) {
   useEffect(() => {
     let cancelled = false
     assistantApi.settings()
-      .then((r) => { if (!cancelled) { setSettings(r.settings); setWidgets(r.widgets) } })
+      .then((r) => { if (!cancelled) { setSettings(r.settings); setWidgets(r.widgets); setEmailCategories(r.email_categories) } })
       .catch((err) => { if (!cancelled) setError((err as Error).message) })
     assistantApi.chatStatus()
       .then((r) => { if (!cancelled) { setModels(r.models); setUsage(r.usage) } })
@@ -27,17 +30,44 @@ export function AssistantSettingsDialog({ data, onSaved, onClose }: Props) {
     return () => { cancelled = true }
   }, [])
 
-  const update = (changes: Partial<AssistantSettings>) => setSettings((s) => (s ? { ...s, ...changes } : s))
+  const update = (changes: Partial<AssistantSettings>) => {
+    setSettings((s) => (s ? { ...s, ...changes } : s))
+    setPreview(null) // out of date
+  }
+  const setExtra = (i: number, changes: Partial<AssistantSettings['extras'][number]>) =>
+    settings && update({ extras: settings.extras.map((x, j) => (j === i ? { ...x, ...changes } : x)) })
+  const moveExtra = (i: number) => {
+    if (!settings || i === 0) return
+    const extras = [...settings.extras]
+    ;[extras[i - 1], extras[i]] = [extras[i], extras[i - 1]]
+    update({ extras })
+  }
+  const setFilters = (changes: Partial<AssistantSettings['filters']>) => settings && update({ filters: { ...settings.filters, ...changes } })
+
+  const cleaned = (s: AssistantSettings): AssistantSettings => ({
+    ...s,
+    extras: s.extras.filter((e) => e.name.trim() && e.text.trim()).map((e) => ({ ...e, name: e.name.trim(), text: e.text.trim() })),
+  })
+
+  const showPreview = async () => {
+    if (!settings) return
+    setPreviewing(true)
+    setError(null)
+    try {
+      setPreview((await assistantApi.preview(cleaned(settings))).prompt)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setPreviewing(false)
+    }
+  }
 
   const save = async () => {
     if (!settings) return
     setSaving(true)
     setError(null)
     try {
-      await assistantApi.save({
-        ...settings,
-        extras: settings.extras.filter((e) => e.name.trim() && e.text.trim()).map((e) => ({ ...e, name: e.name.trim(), text: e.text.trim() })),
-      })
+      await assistantApi.save(cleaned(settings))
       onSaved()
       onClose()
     } catch (err) {
@@ -45,11 +75,6 @@ export function AssistantSettingsDialog({ data, onSaved, onClose }: Props) {
       setSaving(false)
     }
   }
-
-  // Preview with the current (unsaved) wording; the widget sections are as last loaded
-  const preview = settings
-    ? buildPrompt({ ...data, prompt: { instructions: composeInstructions(settings), default_question: settings.default_question } }).prompt
-    : ''
 
   return (
     <Dialog title="Assistant settings" onClose={onClose} wide>
@@ -69,18 +94,27 @@ export function AssistantSettingsDialog({ data, onSaved, onClose }: Props) {
               <button type="button" className="button ghost small-button" disabled={settings.extras.length >= 30}
                 onClick={() => update({ extras: [...settings.extras, { name: '', text: '', enabled: true }] })}>+ Add</button>
             </div>
-            <p className="muted small">Requests added to every brief. Untick to switch one off without deleting it.</p>
+            <p className="muted small">
+              Each one becomes a section of Claude's answer, in this order (↑ moves one up). Tick <b>Rule</b> for something
+              Claude must always do or avoid instead (e.g. "DO NOT MENTION"). Untick the first box to switch one off.
+            </p>
             <ul className="assistant-extras">
               {settings.extras.map((extra, i) => (
                 <li key={i} className={extra.enabled ? '' : 'off'}>
                   <input type="checkbox" checked={extra.enabled} aria-label={`Use ${extra.name || 'this instruction'}`}
-                    onChange={(e) => update({ extras: settings.extras.map((x, j) => (j === i ? { ...x, enabled: e.target.checked } : x)) })} />
+                    onChange={(e) => setExtra(i, { enabled: e.target.checked })} />
                   <div className="assistant-extra-fields">
                     <input type="text" value={extra.name} placeholder="Name, e.g. Meal ideas" maxLength={80} aria-label="Name"
-                      onChange={(e) => update({ extras: settings.extras.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} />
+                      onChange={(e) => setExtra(i, { name: e.target.value })} />
                     <textarea rows={2} value={extra.text} placeholder="What Claude should do" maxLength={600} aria-label="Instruction"
-                      onChange={(e) => update({ extras: settings.extras.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)) })} />
+                      onChange={(e) => setExtra(i, { text: e.target.value })} />
+                    <label className="assistant-extra-rule small">
+                      <input type="checkbox" checked={Boolean(extra.rule)} onChange={(e) => setExtra(i, { rule: e.target.checked })} />
+                      Rule (always follow; not a section of the answer)
+                    </label>
                   </div>
+                  <button type="button" className="icon-button" aria-label={`Move ${extra.name || 'this instruction'} up`} title="Move up"
+                    disabled={i === 0} onClick={() => moveExtra(i)}>↑</button>
                   <button type="button" className="icon-button" aria-label={`Delete ${extra.name || 'this instruction'}`} title="Delete"
                     onClick={() => update({ extras: settings.extras.filter((_, j) => j !== i) })}>✕</button>
                 </li>
@@ -108,13 +142,44 @@ export function AssistantSettingsDialog({ data, onSaved, onClose }: Props) {
                       <label className="assistant-items">
                         <input type="number" min={1} max={50} value={typeof rule === 'number' ? rule : w.default_items}
                           onChange={(e) => setRule(Math.min(50, Math.max(1, Number(e.target.value) || 1)))} aria-label={`Items from ${w.name}`} />
-                        <span className="muted small">items</span>
+                        <span className="muted small">{w.items_label}</span>
                       </label>
                     ) : <span />}
                   </li>
                 )
               })}
             </ul>
+          </section>
+
+          <section>
+            <h3>Filters</h3>
+            <p className="muted small">Left out before Claude sees the briefing (more reliable than asking Claude to ignore them). Separate words with commas.</p>
+            <label className="assistant-filter">
+              <span>Ignore calendar events whose title contains</span>
+              <input type="text" value={settings.filters.calendar_ignore} maxLength={1000} placeholder="e.g. Cabin trip, LICS drop-in, brainwaves"
+                onChange={(e) => setFilters({ calendar_ignore: e.target.value })} />
+            </label>
+            <div className="assistant-filter">
+              <span>Leave out these email categories</span>
+              <div className="assistant-categories">
+                {emailCategories.map((c) => (
+                  <label key={c} className="small">
+                    <input type="checkbox" checked={settings.filters.email_skip_categories.includes(c)}
+                      onChange={(e) => setFilters({
+                        email_skip_categories: e.target.checked
+                          ? [...settings.filters.email_skip_categories, c]
+                          : settings.filters.email_skip_categories.filter((x) => x !== c),
+                      })} />
+                    {c}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <label className="assistant-filter">
+              <span>Ignore emails whose sender or subject contains</span>
+              <input type="text" value={settings.filters.email_ignore} maxLength={1000} placeholder="e.g. skyscanner, verify your account, privacy"
+                onChange={(e) => setFilters({ email_ignore: e.target.value })} />
+            </label>
           </section>
 
           <section>
@@ -148,11 +213,16 @@ export function AssistantSettingsDialog({ data, onSaved, onClose }: Props) {
             {usage && <p className="muted small">This month so far: ${usage.cost.toFixed(2)} ({usage.requests} requests). The chat stops at the budget; 0 turns it off.</p>}
           </section>
 
-          <details className="assistant-preview">
-            <summary>Preview the prompt</summary>
-            <p className="muted small">Widget changes above show up after saving.</p>
-            <pre>{preview}</pre>
-          </details>
+          <section className="assistant-preview">
+            <div className="assistant-settings-head">
+              <h3>Preview</h3>
+              <button type="button" className="button ghost small-button" onClick={showPreview} disabled={previewing}>
+                {previewing ? 'Building…' : preview ? 'Refresh' : 'Show the full prompt'}
+              </button>
+            </div>
+            <p className="muted small">Exactly what Claude gets, with the settings above (saved or not).</p>
+            {preview && <pre>{preview}</pre>}
+          </section>
         </div>
       )}
       {error && <p className="error-text small">{error}</p>}

@@ -302,7 +302,12 @@ def brief(data: dict, limit: int | None = None) -> str:
     return (
         f"{data['city']}: {now['temperature']}°C, {now['weather']['label'].lower()} "
         f"(feels like {now['feels_like']}°C). Today {today['low']}–{today['high']}°C, "
-        f"{today['precipitation_probability'] or 0}% chance of rain, wind {now['wind_kmh']} km/h."
+        f"{today['precipitation_probability'] or 0}% chance of rain, wind {now['wind_kmh']} km/h. "
+        f"Sunrise {today['sunrise']}, sunset {today['sunset']}.\n"
+        "Next hours: " + "; ".join(
+            f"{h['time']} {h['temperature']}°C {h['weather']['label'].lower()}, {h['precipitation_probability'] or 0}% rain"
+            for h in data["hours"][::3]
+        ) + "."
     )
 
 

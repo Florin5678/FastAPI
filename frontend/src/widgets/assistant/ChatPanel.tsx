@@ -8,6 +8,7 @@ type Turn = ChatMessage & { changes?: ChatReply['changes']; failed?: string[] }
 
 const STORAGE_KEY = 'assistant-chat'
 const SUGGESTIONS = [
+  'Brief me', // answered with the sections and rules from the Assistant settings
   'What does my day look like?',
   'How am I doing on my nutrition goals this week?',
   'Remind me tomorrow at 9 to reply to the registrar',

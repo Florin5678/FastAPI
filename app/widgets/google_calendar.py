@@ -116,16 +116,29 @@ def _when(e: dict) -> str:
 
 
 def brief(data: dict, limit: int | None = None) -> str:
+    """The events grouped by day (multi-day events once, under their first day)."""
     if data["needs_setup"]:
         return "Calendar not connected yet."
     if not data["events"]:
         return f"No events in the next {data['days']} day(s)."
-    shown = data["events"][:limit or 12]
-    lines = [f"Upcoming events (next {data['days']} days, local time, with duration):"]
-    for e in shown:
-        lines.append(f"- {_when(e)}: {e['title']}" + (f" at {e['location']}" if e["location"] else ""))
-    if len(data["events"]) > len(shown):
-        lines.append(f"(+{len(data['events']) - len(shown)} more events not listed; don't assume that time is free)")
+    by_day: dict = {}
+    for e in data["events"]:
+        by_day.setdefault(datetime.fromisoformat(e["start"]).date(), []).append(e)
+    lines = [f"Events for the next {data['days']} days (local time, with duration), grouped by day:"]
+    shown, budget = 0, limit or 25
+    for day in sorted(by_day):
+        if shown >= budget:
+            lines.append(f"(events from {day:%a %d %b} on are not listed; don't assume that time is free)")
+            break
+        lines.append(f"{day:%a %d %b}:")
+        for e in by_day[day]:
+            when = _when(e)
+            # The day is already the heading: keep "09:00–10:30 (1 h 30 min)" / "all day (4 days)" etc.
+            when = when.split(" ", 3)[-1]
+            if when.startswith("– "):
+                when = "until " + when[2:]
+            lines.append(f"- {when}: {e['title']}" + (f" at {e['location']}" if e["location"] else ""))
+            shown += 1
     return "\n".join(lines)
 
 

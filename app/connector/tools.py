@@ -20,7 +20,7 @@ from app.connector.oauth import SCOPE, DashboardOAuthProvider, public_url
 from app.core.database import SessionLocal
 from app.mail.routes import _email_dict
 from app.models import BudgetEntry, Email, NutritionEntry, User, Workout
-from app.widgets import REGISTRY, budget, google_calendar, gym, news, notes, nutrition, weather
+from app.widgets import REGISTRY, assistant, budget, google_calendar, gym, news, notes, nutrition, weather
 from app.widgets.registry import WidgetContext, widget_row
 
 TIMEZONE = os.getenv("DASHBOARD_TZ", "Europe/Copenhagen")  # the user's local time for "today"
@@ -41,7 +41,7 @@ INSTRUCTIONS = (
     "delete_workout), budget (add_budget_entry, update_budget_entry, delete_budget_entry, set_budget), "
     "reminders and notes. "
     "When the user asks to be briefed (\"brief me\", \"what's my day like\", \"morning briefing\"...), call "
-    "get_briefing first and answer from it, following the instructions at its top."
+    "get_briefing first and answer from it, following its \"How to answer\" part."
 )
 
 MCP_PATH = "/mcp"
@@ -137,20 +137,14 @@ def _month(value: Optional[str]) -> str:
 
 @mcp.tool(annotations=READ)
 def get_briefing() -> str:
-    """The user's daily briefing from their dashboard's Assistant widget: their own instructions for how to
-    brief them, then today's email, calendar, weather, nutrition, reminders, news, gym. Call this whenever the
-    user says "brief me" or asks about their day, and answer following the instructions at the top."""
+    """The user's daily briefing from their dashboard's Assistant widget: today's facts (date, week, moon,
+    holidays), email, calendar, weather, nutrition, reminders, news, gym, then the user's own "How to answer"
+    sections and rules, and their question. Call this whenever the user says "brief me" or asks about their
+    day, and answer exactly as its "How to answer" part says."""
     with _Call() as call:
+        # The same prompt as "Copy briefing": opening, briefing, how to answer, question
         data = REGISTRY["assistant"].fetch(call.db, call.user, {}, _ctx())
-        when = datetime.now(_zone()).strftime("%A %d %B, %H:%M")
-        prompt = data["prompt"]
-        sections = "\n\n".join(f"## {s['name']}\n{s['text']}" for s in data["sections"]) or "Nothing on the dashboard yet."
-        # Same order as the prompt the widget copies to claude.ai: instructions, briefing, question
-        return (
-            f"# How to brief me\n{prompt['instructions'].replace('{when}', when)}\n\n"
-            f"# My dashboard briefing\n{sections}\n\n"
-            f"# If I just said \"brief me\" (or similar), answer this\n{prompt['default_question']}"
-        )
+        return assistant.fill_when(data["prompt"], TIMEZONE)
 
 
 @mcp.tool(annotations=READ)

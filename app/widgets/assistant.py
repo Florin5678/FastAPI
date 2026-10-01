@@ -1,20 +1,26 @@
 # Assistant widget: a one-stop daily briefing built from the user's other widgets, and a
 # way to ask Claude about it.
 #
-# Claude Pro can't be used by an app (only by a person on claude.ai; the API is billed
-# separately), so this costs nothing: the briefing is plain text assembled here from
-# each widget's brief() (widgets without one, like the private journal, are never
-# included), and the frontend opens claude.ai with the briefing + the user's question,
-# where Claude answers on their own subscription.
+# The briefing is plain text assembled here from a "Today" section (date, week, moon,
+# holidays: app/widgets/today.py) and each widget's brief() (widgets without one, like the
+# private journal, are never included), after the user's filters (ignored calendar events,
+# skipped email categories) are applied in code. compose_prompt() turns it into one prompt:
+#   opening -> the briefing data -> "How to answer" (extra instructions as required answer
+#   sections, then always-on rules) -> the question.
+# The same prompt is used everywhere: get_briefing in the Claude connector (what "Open in
+# Claude" asks Claude on claude.ai to fetch), "Copy briefing", and the AI chat's system
+# prompt (assistant_chat.py). Claude Pro answers on the user's own subscription.
 #
 # What goes into the prompt is edited in the widget's Settings dialog and stored in the
-# widget's row (config["assistant"]): the opening instructions, the default question,
-# switchable extra instructions, and which widgets are included (and how many items).
-# content/assistant_prompt.md only provides the starting values until the settings are
-# first saved.
+# widget's row (config["assistant"]). content/assistant_prompt.md only provides the
+# starting values until the settings are first saved.
 import logging
+import os
+import re
+from datetime import datetime, time, timezone
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Union, get_args
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -22,8 +28,10 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.mail.summarize import Category
 from app.models import Integration, User
 from app.widgets.registry import REGISTRY, WidgetContext, WidgetDefinition, register
+from app.widgets.today import today_section
 
 WIDGET_ID = "assistant"
 logger = logging.getLogger(__name__)
@@ -35,7 +43,13 @@ PROMPT_DEFAULTS = {
     "default question": "Give me a short overview of my day and three practical suggestions.",
 }
 # How many items a widget's brief() sends by default (widgets not listed have no list)
-DEFAULT_LIMITS = {"email_summary": 5, "calendar": 12, "news": 6, "notes": 10, "nutrition": 8}
+DEFAULT_LIMITS = {"email_summary": 15, "calendar": 25, "news": 3, "notes": 15, "nutrition": 10}
+ITEM_LABELS = {"news": "headlines per topic", "calendar": "events", "email_summary": "emails", "notes": "reminders/notes",
+               "nutrition": "foods per day"}
+# Widget settings used when fetching for the briefing (the tile may show less)
+BRIEF_SETTINGS = {"news": {"topic": "All", "max_items": 500}}
+EMAIL_CATEGORIES = [*get_args(Category), "unsummarized"]
+TIMEZONE = os.getenv("DASHBOARD_TZ", "Europe/Copenhagen")
 MAX_EXTRAS = 30
 MAX_ITEMS = 50
 
@@ -46,6 +60,14 @@ class ExtraInstruction(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     text: str = Field(min_length=1, max_length=600)
     enabled: bool = True
+    rule: bool = False  # True: an always-on rule, not a section of the answer
+
+
+class BriefingFilters(BaseModel):
+    """Applied in code before Claude sees anything (more reliable than asking it to ignore)."""
+    calendar_ignore: str = Field("", max_length=1000)  # comma/line separated; events whose title contains one
+    email_skip_categories: list[str] = Field(default_factory=lambda: ["promotion", "newsletter"])
+    email_ignore: str = Field("", max_length=1000)  # comma/line separated; matched in sender or subject
 
 
 class AssistantSettings(BaseModel):
@@ -54,6 +76,7 @@ class AssistantSettings(BaseModel):
     extras: list[ExtraInstruction] = Field(default_factory=list, max_length=MAX_EXTRAS)
     # widget id -> "on" | "off" | number of items; widgets not listed are included as usual
     briefing: dict[str, Union[int, str]] = Field(default_factory=dict)
+    filters: BriefingFilters = Field(default_factory=BriefingFilters)
     # AI chat (paid Claude API, see assistant_chat.py)
     model: str = Field("claude-haiku-4-5", max_length=60)
     monthly_budget: float = Field(5.0, ge=0, le=200)  # USD; 0 = chat off
@@ -126,30 +149,43 @@ def load_settings(db: Session, user: User) -> AssistantSettings:
     return defaults_from_file()
 
 
-def build_prompt(s: AssistantSettings) -> dict:
-    """{"instructions", "default_question"} for the frontend: the opening text, then the
-    enabled extra instructions."""
-    instructions = s.instructions.strip() or PROMPT_DEFAULTS["instructions"]
-    extras = [e for e in s.extras if e.enabled]
-    if extras:
-        instructions += "\n\nIn your answer, also include (only where it fits my question):\n" + "\n".join(
-            f"- {e.name}: {e.text}" for e in extras
-        )
-    return {"instructions": instructions, "default_question": s.default_question.strip() or PROMPT_DEFAULTS["default question"]}
+def _words(text: str) -> list[str]:
+    return [w.strip().lower() for w in re.split(r"[,\n]", text) if w.strip()]
 
 
-# ---- Widget ----
+def _apply_filters(widget_id: str, data: dict, f: BriefingFilters) -> tuple[dict, Optional[str]]:
+    """The widget's data without what the user filtered out, and a note saying how much."""
+    if widget_id == "calendar" and data.get("events"):
+        words = _words(f.calendar_ignore)
+        kept = [e for e in data["events"] if not any(w in (e["title"] or "").lower() for w in words)]
+        left = len(data["events"]) - len(kept)
+        return {**data, "events": kept}, (f"({left} event(s) left out by the ignore list)" if left else None)
+    if widget_id == "email_summary" and data.get("last_24h"):
+        skip, words = set(f.email_skip_categories), _words(f.email_ignore)
+        kept, left = [], {}
+        for e in data["last_24h"]:
+            reason = e["category"] if e["category"] in skip else (
+                "ignore list" if any(w in f"{e['sender']} {e['subject']}".lower() for w in words) else None)
+            if reason:
+                left[reason] = left.get(reason, 0) + 1
+            else:
+                kept.append(e)
+        note = "(Left out by filters: " + ", ".join(f"{n} {r}" for r, n in left.items()) + ")" if left else None
+        return {**data, "last_24h": kept}, note
+    return data, None
 
-def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
-    rows = (
-        db.query(Integration)
-        .filter(Integration.user_id == user.id, Integration.status == "active")
-        .all()
-    )
+
+def default_ctx() -> WidgetContext:
+    """Context for "today" in the user's timezone (for routes without the browser's)."""
+    zone = ZoneInfo(TIMEZONE)
+    midnight = datetime.combine(datetime.now(zone).date(), time.min, tzinfo=zone)
+    return WidgetContext(since=midnight.astimezone(timezone.utc).replace(tzinfo=None), tz=TIMEZONE)
+
+
+def briefing_sections(db: Session, user: User, ctx: WidgetContext, prefs: AssistantSettings) -> list[dict]:
+    rows = db.query(Integration).filter(Integration.user_id == user.id, Integration.status == "active").all()
     active = {row.app_name: row for row in rows}
-    prefs = load_settings(db, user)
-
-    sections = []
+    sections = [{"widget": "today", "name": "Today", "text": today_section(ctx.tz or TIMEZONE)}]
     for definition in REGISTRY.values():  # registry order = a stable, sensible order
         row = active.get(definition.id)
         if row is None or definition.brief is None or definition.id == WIDGET_ID:
@@ -157,18 +193,68 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
         rule = prefs.briefing.get(definition.id)
         if rule == "off":
             continue
-        limit = rule if isinstance(rule, int) else None
+        limit = rule if isinstance(rule, int) else DEFAULT_LIMITS.get(definition.id)
         widget_settings = definition.settings_for(row)
         if limit and "max_items" in widget_settings:
             widget_settings = {**widget_settings, "max_items": limit}  # fetch enough items for the briefing
+        widget_settings = {**widget_settings, **BRIEF_SETTINGS.get(definition.id, {})}
         try:
-            text = definition.brief(definition.fetch(db, user, widget_settings, ctx), limit)
+            data, note = _apply_filters(definition.id, definition.fetch(db, user, widget_settings, ctx), prefs.filters)
+            text = definition.brief(data, limit) + (f"\n{note}" if note else "")
         except Exception:
             logger.warning("Briefing: %s widget failed", definition.id, exc_info=True)
             text = "(couldn't load right now)"
         sections.append({"widget": definition.id, "name": definition.name, "text": text})
+    return sections
 
-    return {"sections": sections, "prompt": build_prompt(prefs)}
+
+def render_sections(sections: list[dict]) -> str:
+    return "\n\n".join(f"## {s['name']}\n{s['text']}" for s in sections)
+
+
+def answer_guide(s: AssistantSettings) -> str:
+    """The extra instructions as required answer sections, then the always-on rules."""
+    parts = []
+    sections = [e for e in s.extras if e.enabled and not e.rule]
+    if sections:
+        parts.append(
+            "Answer with these sections, in this order, each under its name as a heading:\n"
+            + "\n".join(f"{n}. {e.name}: {e.text}" for n, e in enumerate(sections, 1))
+        )
+        parts.append(
+            "Base each section on the briefing. Don't skip a section: if the briefing has nothing for it, say so in "
+            "one short line. If a section asks you to use another connector or tool (e.g. Slack), use it before "
+            "answering; if it isn't available to you, say so in that section."
+        )
+    rules = [f"- {e.name}: {e.text}" for e in s.extras if e.enabled and e.rule]
+    rules += [
+        "- The Today section (date, week, moon, holidays, sky events) is computed and correct: use it, don't work these out yourself.",
+        "- Don't invent facts that aren't in the briefing or a tool result.",
+    ]
+    parts.append("Rules (always follow):\n" + "\n".join(rules))
+    return "\n\n".join(parts)
+
+
+def compose_prompt(s: AssistantSettings, sections: list[dict]) -> str:
+    """The whole prompt; "{when}" is left for the caller to fill with the current time."""
+    opening = s.instructions.strip() or PROMPT_DEFAULTS["instructions"]
+    question = s.default_question.strip() or PROMPT_DEFAULTS["default question"]
+    return (
+        f"{opening}\n\n# My dashboard briefing\n\n{render_sections(sections)}\n\n"
+        f"# How to answer\n\n{answer_guide(s)}\n\n# My question\n\n{question}"
+    )
+
+
+def fill_when(prompt: str, tz: Optional[str] = None) -> str:
+    return prompt.replace("{when}", datetime.now(ZoneInfo(tz or TIMEZONE)).strftime("%A %d %B %Y at %H:%M"))
+
+
+# ---- Widget ----
+
+def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
+    prefs = load_settings(db, user)
+    sections = briefing_sections(db, user, ctx, prefs)
+    return {"sections": sections, "prompt": compose_prompt(prefs, sections)}
 
 
 register(WidgetDefinition(
@@ -195,7 +281,8 @@ def _briefing_widgets(db: Session, user: User) -> list[dict]:
         r.app_name for r in db.query(Integration).filter(Integration.user_id == user.id, Integration.status == "active")
     }
     return [
-        {"id": d.id, "name": d.name, "on_dashboard": d.id in active, "default_items": DEFAULT_LIMITS.get(d.id)}
+        {"id": d.id, "name": d.name, "on_dashboard": d.id in active, "default_items": DEFAULT_LIMITS.get(d.id),
+         "items_label": ITEM_LABELS.get(d.id, "items")}
         for d in REGISTRY.values()
         if d.brief is not None and d.id != WIDGET_ID
     ]
@@ -203,7 +290,15 @@ def _briefing_widgets(db: Session, user: User) -> list[dict]:
 
 @router.get("/settings")
 def get_settings(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return {"settings": load_settings(db, user).model_dump(), "widgets": _briefing_widgets(db, user)}
+    return {"settings": load_settings(db, user).model_dump(), "widgets": _briefing_widgets(db, user),
+            "email_categories": EMAIL_CATEGORIES}
+
+
+@router.post("/preview")
+def preview(body: AssistantSettings, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """The prompt as it would be with these (unsaved) settings, for the Settings dialog."""
+    ctx = default_ctx()
+    return {"prompt": fill_when(compose_prompt(body, briefing_sections(db, user, ctx, body)))}
 
 
 @router.put("/settings")
@@ -215,6 +310,9 @@ def save_settings(body: AssistantSettings, user: User = Depends(get_current_user
             raise HTTPException(status_code=422, detail="Each widget must be on, off or a number of items")
         if isinstance(rule, int) and not 0 < rule <= MAX_ITEMS:
             raise HTTPException(status_code=422, detail=f"Number of items must be 1 to {MAX_ITEMS}")
+    unknown = set(body.filters.email_skip_categories) - set(EMAIL_CATEGORIES)
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Unknown email categories: {', '.join(sorted(unknown))}")
     from app.widgets.assistant_chat import MODELS  # (imported here: assistant_chat imports this module)
     if body.model not in MODELS:
         raise HTTPException(status_code=422, detail=f"Model must be one of: {', '.join(MODELS)}")

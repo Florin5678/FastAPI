@@ -11,3 +11,4 @@ itsdangerous
 feedparser
 tzdata
 mcp>=2.2,<3
+holidays>=0.100,<1

@@ -1,13 +1,22 @@
 // Assistant widget: the prompt settings (edited in the widget's Settings dialog)
 import { json, request } from './client'
 
-export type ExtraInstruction = { name: string; text: string; enabled: boolean }
+// rule: an always-on rule instead of a section of the answer
+export type ExtraInstruction = { name: string; text: string; enabled: boolean; rule?: boolean }
+
+// Applied on the server before Claude sees anything
+export type BriefingFilters = {
+  calendar_ignore: string // comma/line separated words; events whose title contains one are left out
+  email_skip_categories: string[]
+  email_ignore: string // comma/line separated words, matched in sender or subject
+}
 
 export type AssistantSettings = {
   instructions: string // opening text; {when} = the current day and time
   default_question: string
   extras: ExtraInstruction[]
   briefing: Record<string, number | 'on' | 'off'> // widget id -> items / on / off (missing = included as usual)
+  filters: BriefingFilters
   model: string // AI chat model id
   monthly_budget: number // AI chat spend limit per month, USD (0 = off)
 }
@@ -22,10 +31,13 @@ export type ChatReply = {
   usage: ChatUsage
 }
 
-export type BriefingWidget = { id: string; name: string; on_dashboard: boolean; default_items: number | null }
+export type BriefingWidget = { id: string; name: string; on_dashboard: boolean; default_items: number | null; items_label: string }
 
 export const assistantApi = {
-  settings: () => request<{ settings: AssistantSettings; widgets: BriefingWidget[] }>('/widgets/assistant/settings'),
+  settings: () => request<{ settings: AssistantSettings; widgets: BriefingWidget[]; email_categories: string[] }>('/widgets/assistant/settings'),
+  // The whole prompt with these (unsaved) settings
+  preview: (settings: AssistantSettings) =>
+    request<{ prompt: string }>('/widgets/assistant/preview', { method: 'POST', ...json(settings) }),
   chatStatus: () => request<{ enabled: boolean; usage: ChatUsage; models: ChatModel[] }>('/widgets/assistant/chat/status'),
   chat: (messages: ChatMessage[]) => request<ChatReply>('/widgets/assistant/chat', { method: 'POST', ...json({ messages }) }),
   save: (settings: AssistantSettings) =>
