@@ -1,4 +1,4 @@
-// Nutrition widget: food log, day view, history, USDA food search
+// Nutrition widget: food log, day view, history, food search (USDA + Open Food Facts)
 import { json, request } from './client'
 
 export type NutrientKey = 'calories' | 'protein' | 'carbs' | 'fat' | 'fiber' | 'sugar' | 'sat_fat'

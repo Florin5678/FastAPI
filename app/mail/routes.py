@@ -55,7 +55,8 @@ def get_email(email_id: int, user: User = Depends(get_current_user), db: Session
 
 @router.post("/summaries/run")
 def run_summaries(limit: int = 10, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Summarize stored emails that don't have a summary yet (called by the sync workflow)."""
+    """Summarize stored emails that don't have a summary yet (called by "Sync now"; scheduled syncs
+    summarize by themselves, see gmail_routes.sync_gmail)."""
     return summarize_pending(db, user.id, limit=limit)
 
 

@@ -2,16 +2,10 @@
 .budget-widget { display: flex; flex-direction: column; gap: 12px; }
 .budget-empty { align-items: flex-start; }
 .budget-empty p { margin: 0; font-size: 14px; line-height: 1.5; }
-.budget-summary { display: flex; flex-direction: column; gap: 2px; }
-.budget-total { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
 .budget-pos { color: #1a8a4a; font-weight: 600; }
 .budget-neg { color: var(--danger); font-weight: 600; }
-.budget-categories { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
-.budget-categories li { display: flex; flex-direction: column; gap: 4px; }
-.budget-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; }
 .budget-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .budget-value { white-space: nowrap; font-variant-numeric: tabular-nums; }
-.bar-fill.budget-neutral { background: var(--accent); opacity: 0.55; }
 .budget-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* Add / edit entry form */

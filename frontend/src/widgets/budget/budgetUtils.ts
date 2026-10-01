@@ -7,17 +7,6 @@ export function formatMoney(value: number, currency: string, decimals = 0): stri
   return currency ? `${text} ${currency}` : text
 }
 
-export function monthTitle(month: string, withYear = true): string {
-  const [y, m] = month.split('-').map(Number)
-  return new Date(y, m - 1, 1).toLocaleDateString([], withYear ? { month: 'long', year: 'numeric' } : { month: 'long' })
-}
-
-export function shiftMonth(month: string, delta: number): string {
-  const [y, m] = month.split('-').map(Number)
-  const d = new Date(y, m - 1 + delta, 1)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-}
-
 export const isIncome = (category: string) => category.trim().toLowerCase() === 'income'
 
 // Category tree of one month's entries: every node's total includes everything under it;

@@ -6,6 +6,7 @@ import {
 import { JournalComposer } from './JournalComposer'
 import { QUICK_MOODS } from './moods'
 import { MoodMonths } from './MoodMonths'
+import { dayTitle, longDate } from '../../lib/dates'
 
 const RANGES: { label: string; days: number }[] = [
   { label: '30 days', days: 30 },
@@ -14,17 +15,6 @@ const RANGES: { label: string; days: number }[] = [
   { label: 'All', days: 3660 },
 ]
 const MONTH_RANGES = [3, 6, 12]
-
-function dayTitle(day: string): string {
-  const today = localDate()
-  if (day === today) return 'Today'
-  if (day === shiftDay(today, -1)) return 'Yesterday'
-  return new Date(day + 'T12:00').toLocaleDateString([], { weekday: 'long' })
-}
-
-function longDate(day: string): string {
-  return new Date(day + 'T12:00').toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' })
-}
 
 function timeOf(iso: string | null): string {
   return iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''

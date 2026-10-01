@@ -3,15 +3,19 @@ import html
 import re
 import requests
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
 from app.models import User, Email
 from app.auth.google_tokens import get_valid_access_token
-from app.core.security import get_current_user, get_sync_user
+from app.core.security import get_sync_user
+from app.mail.summarize import summarize_pending
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
 
@@ -97,22 +101,29 @@ def _header(headers: list, name: str) -> str:
     return ""
 
 
-@router.get("/messages")
-def list_messages(user: User = Depends(get_current_user), max_results: int = 10, db: Session = Depends(get_db)):
-    access_token = _get_access_token(db, user)
-
-    return _gmail_get("/messages", access_token, {"maxResults": max_results})
-
-
-@router.get("/message/{message_id}")
-def get_message(message_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    access_token = _get_access_token(db, user)
-
-    return _gmail_get(f"/messages/{message_id}", access_token, {"format": "full"})
+def _summarize_new(user_id: int) -> None:
+    """Summarize the emails a scheduled sync just stored (after the response, so the
+    scheduler's request doesn't time out)."""
+    db = SessionLocal()
+    try:
+        summarize_pending(db, user_id, limit=20)
+    except Exception:
+        logger.warning("Summarizing after the scheduled sync failed", exc_info=True)
+    finally:
+        db.close()
 
 
 @router.post("/sync/gmail")
-def sync_gmail(user: User = Depends(get_sync_user), max_results: int = 20, db: Session = Depends(get_db)):
+def sync_gmail(
+    background: BackgroundTasks,
+    user: User = Depends(get_sync_user),
+    max_results: int = 20,
+    x_api_key: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """Store new Gmail messages. Called by "Sync now" (which then summarizes itself, to
+    show the count) and every 10 minutes by cron-job.org with X-API-Key, in which case
+    the new emails are summarized in the background."""
     access_token = _get_access_token(db, user)
 
     list_data = _gmail_get("/messages", access_token, {"maxResults": max_results})
@@ -145,4 +156,6 @@ def sync_gmail(user: User = Depends(get_sync_user), max_results: int = 20, db: S
         saved += 1
 
     db.commit()
+    if saved and x_api_key:
+        background.add_task(_summarize_new, user.id)
     return {"synced": saved, "checked": len(message_ids)}

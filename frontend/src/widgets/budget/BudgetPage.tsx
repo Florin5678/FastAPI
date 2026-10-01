@@ -3,7 +3,8 @@ import { budgetApi, localDate, type BudgetEntry, type BudgetMonth } from '../../
 import { Dialog } from '../../components/Dialog'
 import { EntryDialog } from './EntryDialog'
 import { MonthChart } from './MonthChart'
-import { buildTree, formatMoney, isIncome, monthTitle, shiftMonth, type TreeNode } from './budgetUtils'
+import { monthTitle, shiftMonth } from '../../lib/dates'
+import { buildTree, formatMoney, isIncome, type TreeNode } from './budgetUtils'
 import './budget.css'
 
 type Editing =

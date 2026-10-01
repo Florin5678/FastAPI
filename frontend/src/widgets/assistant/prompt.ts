@@ -1,6 +1,6 @@
 // The Assistant's prompt. The server builds all of it (app/widgets/assistant.py): the
-// briefing, then "How to answer" (the extra instructions as sections, then the rules),
-// then the question; {when} is filled in here with the current time.
+// briefing, then "How to answer" (the answer sections, then fixed rules),
+// then the Claude prompt; {when} is filled in here with the current time.
 
 export type AssistantData = {
   sections: { widget: string; name: string; text: string }[]

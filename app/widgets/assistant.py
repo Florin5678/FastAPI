@@ -6,15 +6,14 @@
 # private journal, are never included), after the user's filters (ignored calendar events,
 # skipped email categories) are applied in code. compose_prompt() turns it into one prompt:
 #   opening -> the briefing data -> "How to answer" (the answer sections, then fixed
-#   rules) -> the question.
+#   rules) -> the Claude prompt (what "Open in Claude" sends).
 # The same prompt is used everywhere: get_briefing in the Claude connector (what "Open in
-# Claude" asks Claude on claude.ai to fetch), "Copy briefing", and the AI chat's system
-# prompt (assistant_chat.py). Claude Pro answers on the user's own subscription.
+# Claude" asks Claude on claude.ai to fetch) and "Copy briefing"; the AI chat's system prompt
+# (assistant_chat.py) gets the same briefing and "How to answer". Claude Pro answers on the user's own subscription.
 #
 # What goes into the prompt is edited in the widget's Settings dialog and stored in the
 # widget's row (config["assistant"]); default_settings() is used until they're first saved.
 import logging
-import os
 import re
 from datetime import datetime, time, timezone
 from typing import Optional, Union, get_args
@@ -26,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.core.timeutil import DASHBOARD_TZ
 from app.mail.summarize import Category
 from app.models import Integration, User
 from app.widgets.registry import REGISTRY, WidgetContext, WidgetDefinition, register
@@ -51,7 +51,7 @@ ITEM_LABELS = {"news": "headlines per topic", "calendar": "events", "email_summa
 # Widget settings used when fetching for the briefing (the tile may show less)
 BRIEF_SETTINGS = {"news": {"topic": "All", "max_items": 500}}
 EMAIL_CATEGORIES = [*get_args(Category), "unsummarized"]
-TIMEZONE = os.getenv("DASHBOARD_TZ", "Europe/Copenhagen")
+TIMEZONE = DASHBOARD_TZ
 MAX_EXTRAS = 30
 MAX_ITEMS = 50
 

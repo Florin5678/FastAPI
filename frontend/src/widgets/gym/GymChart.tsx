@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { gymApi, localDate, type GymStats, type GymStatsLevel } from '../../api'
+import { duration } from '../../lib/format'
 
 // Minutes per workout type for a week, month or year, as a pie (each type's share) or
 // columns (minutes per type, types on the x axis). Level and chart type
@@ -19,12 +20,6 @@ function savedPrefs(): Prefs {
   } catch {
     return { level: 'month', view: 'pie' }
   }
-}
-
-function duration(minutes: number): string {
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  return h ? (m ? `${h} h ${m} min` : `${h} h`) : `${m} min`
 }
 
 // Move the anchor day one period back or forward

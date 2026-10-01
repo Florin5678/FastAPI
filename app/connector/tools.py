@@ -1,7 +1,6 @@
 # The tools Claude gets through the connector. Reads return compact data; writes go
 # through the same widget functions (and validation) as the dashboard itself, and each
 # one is logged in connector_changes with how to undo it. The journal has no tools.
-import os
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
@@ -18,12 +17,13 @@ from sqlalchemy.orm import Session
 from app.connector import changes
 from app.connector.oauth import SCOPE, DashboardOAuthProvider, public_url
 from app.core.database import SessionLocal
+from app.core.timeutil import DASHBOARD_TZ
 from app.mail.routes import _email_dict
 from app.models import BudgetEntry, Email, NutritionEntry, User, Workout
 from app.widgets import REGISTRY, assistant, budget, google_calendar, gym, news, notes, nutrition, weather
 from app.widgets.registry import WidgetContext, widget_row
 
-TIMEZONE = os.getenv("DASHBOARD_TZ", "Europe/Copenhagen")  # the user's local time for "today"
+TIMEZONE = DASHBOARD_TZ  # the user's local time for "today"
 MAX_EMAIL_BODY = 20_000
 
 READ = ToolAnnotations(readOnlyHint=True, openWorldHint=False)

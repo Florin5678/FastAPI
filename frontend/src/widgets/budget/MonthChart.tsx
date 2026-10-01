@@ -1,4 +1,4 @@
-import { monthTitle } from './budgetUtils'
+import { monthTitle } from '../../lib/dates'
 
 type MonthTotals = { month: string; income: number; expenses: number }
 

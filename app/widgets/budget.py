@@ -170,12 +170,6 @@ class EntryPatch(BaseModel):
     amount: Optional[float] = Field(None, ge=-1e9, le=1e9)
 
 
-class RenameIn(BaseModel):
-    path: list[str] = Field(min_length=1, max_length=LEVELS)  # the category to rename
-    name: str = Field(min_length=1, max_length=120)
-    month: Optional[str] = Field(None, pattern=MONTH_RE)  # None = every month
-
-
 class GroupIn(BaseModel):
     path: list[str] = Field(min_length=1, max_length=LEVELS)
     month: str = Field(pattern=MONTH_RE)
@@ -276,26 +270,6 @@ def delete_entry(entry_id: int, user: User = Depends(get_current_user), db: Sess
     db.delete(entry)
     db.commit()
     return {"deleted": entry_id}
-
-
-@router.post("/rename")
-def rename_category(body: RenameIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Rename a category at any level, in one month or all months. Renaming to an
-    existing name merges the two."""
-    path = _clean_path(body.path)
-    column = (BudgetEntry.category, BudgetEntry.sub1, BudgetEntry.sub2, BudgetEntry.sub3)[len(path) - 1]
-    changed = _under(db.query(BudgetEntry), user, path, body.month).update(
-        {column: body.name.strip(), BudgetEntry.updated_at: datetime.utcnow()}, synchronize_session=False
-    )
-    if len(path) == 2 and not _is_income(path[0]) and body.month is None:
-        # Keep the budget of a renamed spending category
-        row = widget_row(db, user, WIDGET_ID)
-        budgets = dict((row.config or {}).get("budgets") or {})
-        if path[1] in budgets:
-            budgets[body.name.strip()] = budgets.pop(path[1])
-            row.config = {**(row.config or {}), "budgets": budgets}
-    db.commit()
-    return {"changed": changed}
 
 
 @router.post("/delete-group")

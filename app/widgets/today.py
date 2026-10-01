@@ -8,6 +8,8 @@ from zoneinfo import ZoneInfo
 
 import holidays
 
+from app.core.timeutil import DASHBOARD_TZ
+
 HOLIDAY_COUNTRIES = {"DK": "Denmark", "RO": "Romania"}
 LOOKAHEAD_DAYS = 14
 
@@ -80,7 +82,7 @@ def _upcoming(today: date) -> list[tuple[date, str]]:
 
 
 def today_section(tz: str | None) -> str:
-    zone = ZoneInfo(tz or "Europe/Copenhagen")
+    zone = ZoneInfo(tz or DASHBOARD_TZ)
     now = datetime.now(zone)
     today = now.date()
     lines = [

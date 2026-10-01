@@ -30,7 +30,6 @@
 .saved-note { color: #1a8a4a; font-size: 13px; font-weight: 600; }
 .journal-foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .journal-page .card { margin-bottom: 22px; }
-.journal-day h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 22px 0 10px; }
 .entry-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 6px; }
 .entry-head { display: flex; align-items: center; gap: 8px; }
 .entry-mood { font-size: 20px; min-width: 20px; }
@@ -39,7 +38,6 @@
 .entry-edit { display: flex; flex-direction: column; gap: 8px; }
 .button.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
 .crisis-note { margin-top: 28px; text-align: center; }
-.journal-empty { margin-top: 10px; }
 
 /* Journal lock + history */
 .journal-lock { display: flex; justify-content: center; padding: 40px 0; }

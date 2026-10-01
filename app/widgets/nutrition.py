@@ -156,7 +156,7 @@ def brief(data: dict, limit: int | None = None) -> str:
 register(WidgetDefinition(
     id=WIDGET_ID,
     name="Nutrition",
-    description="Daily intake vs your goals (calories, protein, carbs, fat, fiber, sugar). Log meals from the USDA food database or by hand; every day is kept in your history.",
+    description="Daily intake vs your goals (calories, protein, carbs, fat, fiber, sugar). Log meals from the USDA and Open Food Facts databases or by hand; every day is kept in your history.",
     fetch=fetch,
     brief=brief,
     default_size=(4, 9),

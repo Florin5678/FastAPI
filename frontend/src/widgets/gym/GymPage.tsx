@@ -2,25 +2,10 @@ import { useEffect, useState } from 'react'
 import { gymApi, localDate, type GymMonth } from '../../api'
 import { GymChart } from './GymChart'
 import './gym.css'
+import { monthTitle, shiftMonth } from '../../lib/dates'
+import { duration } from '../../lib/format'
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-
-function shiftMonth(month: string, delta: number): string {
-  const [y, m] = month.split('-').map(Number)
-  const d = new Date(y, m - 1 + delta, 1)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-}
-
-function monthTitle(month: string): string {
-  const [y, m] = month.split('-').map(Number)
-  return new Date(y, m - 1, 1).toLocaleDateString([], { month: 'long', year: 'numeric' })
-}
-
-function duration(minutes: number): string {
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  return h ? (m ? `${h} h ${m} min` : `${h} h`) : `${m} min`
-}
 
 // Full view of the Gym widget: a month calendar of workouts plus weekly totals vs the goals
 export function GymPage() {

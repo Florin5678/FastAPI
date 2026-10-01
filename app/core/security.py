@@ -1,5 +1,5 @@
 # Who is making this request: a signed-in browser (session cookie) or the
-# sync workflow (X-API-Key header + ?email=).
+# script with the admin key (X-API-Key header + ?email=).
 import os
 import secrets
 import time
@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.models import User
 
 # Generate one with: python -c "import secrets; print(secrets.token_urlsafe(32))"
-# Set it as API_KEY on Render (and as a GitHub Actions secret for the sync workflow).
+# Set it as API_KEY on Render (an admin key for scripts; cron-job.org uses SYNC_API_KEY).
 API_KEY = os.getenv("API_KEY")
 
 

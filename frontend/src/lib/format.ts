@@ -41,3 +41,10 @@ export function timeAgo(iso: string | null): string {
   if (hours < 48) return 'yesterday'
   return new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short' })
 }
+
+// 75 -> "1 h 15 min", 60 -> "1 h", 40 -> "40 min"
+export function duration(minutes: number): string {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return h ? (m ? `${h} h ${m} min` : `${h} h`) : `${m} min`
+}

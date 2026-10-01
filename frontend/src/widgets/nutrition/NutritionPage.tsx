@@ -7,23 +7,9 @@ import { AddFoodDialog } from './AddFoodDialog'
 import { EditFoodDialog } from './EditFoodDialog'
 import { FoodLog, NutrientBars } from './NutritionParts'
 import { barState, fmt } from './nutrients'
+import { dayTitle, longDate, shortDate } from '../../lib/dates'
 
 const RANGES = [7, 14, 30, 90]
-
-function dayTitle(day: string): string {
-  const today = localDate()
-  if (day === today) return 'Today'
-  if (day === shiftDay(today, -1)) return 'Yesterday'
-  return new Date(day + 'T12:00').toLocaleDateString([], { weekday: 'long' })
-}
-
-function longDate(day: string): string {
-  return new Date(day + 'T12:00').toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' })
-}
-
-function shortDate(day: string): string {
-  return new Date(day + 'T12:00').toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })
-}
 
 // Full view of the Nutrition widget: any day's intake + food log, and a history table
 export function NutritionPage() {

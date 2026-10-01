@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.timeutil import DASHBOARD_TZ
 from app.models import Email, User
 from app.mail.summarize import get_client
 from app.widgets.registry import ConfigField, WidgetContext, WidgetDefinition, register
@@ -40,7 +41,7 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
         .limit(RECENT_MAX)
         .all()
     )
-    zone = ZoneInfo(ctx.tz or "Europe/Copenhagen")
+    zone = ZoneInfo(ctx.tz or DASHBOARD_TZ)
 
     return {
         "today_total": sum(c["count"] for c in categories),

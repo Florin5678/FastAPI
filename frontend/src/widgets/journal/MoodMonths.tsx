@@ -1,15 +1,7 @@
 import type { MoodMonth } from '../../api'
+import { monthTitle, shortDate } from '../../lib/dates'
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-
-function monthTitle(month: string): string {
-  const [y, m] = month.split('-').map(Number)
-  return new Date(y, m - 1, 1).toLocaleDateString([], { month: 'long', year: 'numeric' })
-}
-
-function dayLabel(day: string): string {
-  return new Date(day + 'T12:00').toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })
-}
 
 // One card per month: a calendar placing each day's mood (when moods cluster), and
 // a bar per emoji sized by how often it was used (the month's mood mix).
@@ -51,8 +43,8 @@ function MonthCard({ month, today, onPickDay }: { month: MoodMonth; today: strin
           const moods = month.days[day]
           const future = day > today
           const label = moods
-            ? `${dayLabel(day)}: ${moods.length ? moods.join(' ') : 'entry without a mood'}`
-            : `${dayLabel(day)}: no entry`
+            ? `${shortDate(day)}: ${moods.length ? moods.join(' ') : 'entry without a mood'}`
+            : `${shortDate(day)}: no entry`
           return (
             <button
               key={day}

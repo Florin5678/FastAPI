@@ -3,7 +3,8 @@ import { budgetApi } from '../../api'
 import type { WidgetProps } from '../types'
 import { EntryDialog } from './EntryDialog'
 import { MonthChart } from './MonthChart'
-import { formatMoney, monthTitle } from './budgetUtils'
+import { monthTitle } from '../../lib/dates'
+import { formatMoney } from './budgetUtils'
 import './budget.css'
 
 export type BudgetData = {
