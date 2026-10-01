@@ -178,6 +178,13 @@ export function AssistantSettingsDialog({ onSaved, onClose }: Props) {
           </section>
 
           <section>
+            <h3>Rules</h3>
+            <p className="muted small">Added after the answer sections, for every briefing and the AI chat. Leave empty for the default rules.</p>
+            <textarea rows={8} value={settings.rules} maxLength={4000}
+              onChange={(e) => update({ rules: e.target.value })} aria-label="Rules" />
+          </section>
+
+          <section>
             <h3>Claude prompt</h3>
             <p className="muted small">What "Open in Claude" asks.</p>
             <textarea rows={3} value={settings.claude_prompt} maxLength={2000}

@@ -13,6 +13,7 @@ export type BriefingFilters = {
 
 export type AssistantSettings = {
   instructions: string // opening text; {when} = the current day and time
+  rules: string // after the answer sections in "How to answer"
   claude_prompt: string // what "Open in Claude" sends to claude.ai
   extras: ExtraInstruction[]
   briefing: Record<string, number | 'on' | 'off'> // widget id -> items / on / off (missing = included as usual)

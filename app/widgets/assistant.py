@@ -5,7 +5,7 @@
 # holidays: app/widgets/today.py) and each widget's brief() (widgets without one, like the
 # private journal, are never included), after the user's filters (ignored calendar events,
 # skipped email categories) are applied in code. compose_prompt() turns it into one prompt:
-#   opening -> the briefing data -> "How to answer" (the answer sections, then fixed
+#   opening -> the briefing data -> "How to answer" (the answer sections, then the
 #   rules) -> the Claude prompt (what "Open in Claude" sends).
 # The same prompt is used everywhere: get_briefing in the Claude connector (what "Open in
 # Claude" asks Claude on claude.ai to fetch) and "Copy briefing"; the AI chat's system prompt
@@ -38,6 +38,16 @@ logger = logging.getLogger(__name__)
 PROMPT_DEFAULTS = {
     "instructions": "Here is my personal dashboard briefing for {when}. Use it as context.",
 }
+# What follows the answer sections in "How to answer" (editable in Settings as "Rules")
+DEFAULT_RULES = (
+    "Base each section on the briefing. Don't skip a section: if the briefing has nothing for it, say so in one "
+    "short line. If a section asks you to use another connector or tool (e.g. Slack), use it before answering; "
+    "if it isn't available to you, say so in that section.\n\n"
+    "Rules (always follow):\n"
+    "- The Today section (date, week, moon, holidays, sky events) is computed and correct: use it, don't work "
+    "these out yourself.\n"
+    "- Don't invent facts that aren't in the briefing or a tool result."
+)
 # What "Open in Claude" pre-fills on claude.ai (editable in Settings as "Claude prompt"):
 # Claude then fetches the full briefing itself through the connector's get_briefing
 DEFAULT_CLAUDE_PROMPT = (
@@ -73,6 +83,7 @@ class BriefingFilters(BaseModel):
 
 class AssistantSettings(BaseModel):
     instructions: str = Field(max_length=3000)
+    rules: str = Field(DEFAULT_RULES, max_length=4000)  # after the answer sections in "How to answer"
     claude_prompt: str = Field(DEFAULT_CLAUDE_PROMPT, max_length=2000)  # what "Open in Claude" sends
     extras: list[ExtraInstruction] = Field(default_factory=list, max_length=MAX_EXTRAS)
     # widget id -> "on" | "off" | number of items; widgets not listed are included as usual
@@ -181,7 +192,7 @@ def render_sections(sections: list[dict]) -> str:
 
 
 def answer_guide(s: AssistantSettings) -> str:
-    """The answer sections (the "extras"), then the fixed rules."""
+    """The answer sections (the "extras"), then the user's rules."""
     parts = []
     sections = [e for e in s.extras if e.enabled]
     if sections:
@@ -189,16 +200,7 @@ def answer_guide(s: AssistantSettings) -> str:
             "Answer with these sections, in this order, each under its name as a heading:\n"
             + "\n".join(f"{n}. {e.name}: {e.text}" for n, e in enumerate(sections, 1))
         )
-        parts.append(
-            "Base each section on the briefing. Don't skip a section: if the briefing has nothing for it, say so in "
-            "one short line. If a section asks you to use another connector or tool (e.g. Slack), use it before "
-            "answering; if it isn't available to you, say so in that section."
-        )
-    rules = [
-        "- The Today section (date, week, moon, holidays, sky events) is computed and correct: use it, don't work these out yourself.",
-        "- Don't invent facts that aren't in the briefing or a tool result.",
-    ]
-    parts.append("Rules (always follow):\n" + "\n".join(rules))
+    parts.append(s.rules.strip() or DEFAULT_RULES)
     return "\n\n".join(parts)
 
 
