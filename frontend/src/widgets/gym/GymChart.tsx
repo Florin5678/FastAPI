@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { gymApi, localDate, type GymStats, type GymStatsLevel } from '../../api'
 
 // Minutes per workout type for a week, month or year, as a pie (each type's share) or
-// stacked columns (the period over time: days / weeks / months). Level and chart type
+// columns (minutes per type, types on the x axis). Level and chart type
 // are remembered in this browser. Each type keeps one colour (its place in the routine
 // list -> the validated categorical palette in gym.css), so colours never shift.
 const STORE_KEY = 'gym-chart'
@@ -100,7 +100,7 @@ export function GymChart() {
             {duration(total)} · {sessions} workout{sessions === 1 ? '' : 's'} · {data.active_days} active day{data.active_days === 1 ? '' : 's'}
           </p>
           <div className={prefs.view === 'pie' ? 'gym-chart-body pie' : 'gym-chart-body'}>
-            {prefs.view === 'pie' ? <Pie data={data} total={total} slot={slot} /> : <Columns data={data} slot={slot} />}
+            {prefs.view === 'pie' ? <Pie data={data} total={total} slot={slot} /> : <Columns data={data} total={total} slot={slot} />}
             <ul className="gym-legend">
               {data.totals.map((t) => (
                 <li key={t.kind}>
@@ -142,24 +142,22 @@ function Pie({ data, total, slot }: { data: GymStats; total: number; slot: Slot 
   )
 }
 
-function Columns({ data, slot }: { data: GymStats; slot: Slot }) {
-  const sums = data.columns.map((c) => Object.values(c.minutes).reduce((s, m) => s + m, 0))
-  const max = Math.max(1, ...sums)
-  // Stack in legend order (biggest type first, at the bottom)
-  const order = data.totals.map((t) => t.kind)
+function Columns({ data, total, slot }: { data: GymStats; total: number; slot: Slot }) {
+  // One column per workout type done in the period (types with no time are left out)
+  const shown = data.totals.filter((t) => t.minutes > 0)
+  const max = Math.max(1, ...shown.map((t) => t.minutes))
   return (
-    <div className="gym-columns" role="img" aria-label="Minutes per workout type over time">
-      {data.columns.map((c, i) => (
-        <div key={c.start} className="gym-column"
-          title={sums[i] ? `${c.label}: ${duration(sums[i])}\n` + order.filter((k) => c.minutes[k]).map((k) => `${k} ${duration(c.minutes[k])}`).join('\n') : `${c.label}: no workouts`}>
+    <div className="gym-columns" role="img" aria-label="Minutes per workout type">
+      {shown.map((t) => (
+        <div key={t.kind} className="gym-column"
+          title={`${t.kind}: ${duration(t.minutes)} (${Math.round((t.minutes / total) * 100)}%), ${t.sessions}×`}>
           <span className="gym-column-track">
-            <span className="gym-column-stack" style={{ height: `${(sums[i] / max) * 100}%` }}>
-              {order.filter((k) => c.minutes[k]).map((k) => (
-                <span key={k} className={`gym-column-seg gym-series-${slot(k)}`} style={{ flexGrow: c.minutes[k] }} />
-              ))}
+            <span className="gym-column-stack" style={{ height: `${(t.minutes / max) * 100}%` }}>
+              <span className={`gym-column-seg gym-series-${slot(t.kind)}`} style={{ flexGrow: 1 }} />
+              <span className="gym-column-value">{duration(t.minutes)}</span>
             </span>
           </span>
-          <span className="gym-column-label">{c.label}</span>
+          <span className="gym-column-label">{t.kind}</span>
         </div>
       ))}
     </div>

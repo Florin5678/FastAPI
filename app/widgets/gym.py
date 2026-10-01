@@ -231,49 +231,34 @@ def stats(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Minutes per workout type for one week, month or year (for the Gym page's chart):
-    the totals, and the same split over time (days of the week, weeks of the month,
-    months of the year)."""
+    """Minutes and sessions per workout type for one week, month or year (the Gym page's chart)."""
     widget_row(db, user, WIDGET_ID)
     if level == "week":
         start = _week_start(anchor)
         end = start + timedelta(days=7)
-        buckets = [(start + timedelta(days=i), start + timedelta(days=i + 1)) for i in range(7)]
         label = f"Week {start.isocalendar().week} · {start:%d %b} – {end - timedelta(days=1):%d %b %Y}"
-        bucket_label = lambda b: f"{b:%a %d}"  # noqa: E731
     elif level == "month":
         start = anchor.replace(day=1)
         end = date(start.year + (start.month == 12), start.month % 12 + 1, 1)
-        buckets, week = [], _week_start(start)
-        while week < end:  # weeks clipped to the month, so they add up to the month
-            buckets.append((max(week, start), min(week + timedelta(days=7), end)))
-            week += timedelta(days=7)
         label = f"{start:%B %Y}"
-        bucket_label = lambda b: f"W{b.isocalendar().week}"  # noqa: E731
     elif level == "year":
         start, end = date(anchor.year, 1, 1), date(anchor.year + 1, 1, 1)
-        buckets = [(date(anchor.year, m, 1), date(anchor.year + (m == 12), m % 12 + 1, 1)) for m in range(1, 13)]
         label = str(anchor.year)
-        bucket_label = lambda b: f"{b:%b}"  # noqa: E731
     else:
         raise HTTPException(status_code=422, detail="level must be week, month or year")
 
     workouts = db.query(Workout).filter(Workout.user_id == user.id, Workout.day >= start, Workout.day < end).all()
     totals: dict[str, dict] = {}
-    columns = [{"label": bucket_label(b_start), "start": b_start.isoformat(), "minutes": {}} for b_start, _ in buckets]
     for w in workouts:
         t = totals.setdefault(w.kind, {"kind": w.kind, "sessions": 0, "minutes": 0})
         t["sessions"] += 1
         t["minutes"] += w.minutes
-        i = next(i for i, (b_start, b_end) in enumerate(buckets) if b_start <= w.day < b_end)
-        columns[i]["minutes"][w.kind] = columns[i]["minutes"].get(w.kind, 0) + w.minutes
     return {
         "level": level,
         "label": label,
         "start": start.isoformat(),
         "end": (end - timedelta(days=1)).isoformat(),
-        "totals": sorted(totals.values(), key=lambda t: -t["minutes"]),
-        "columns": columns,
+        "totals": sorted(totals.values(), key=lambda t: -t["minutes"]),  # only types done in the period
         "active_days": len({w.day for w in workouts}),
         "kinds": load_routines(),  # fixed order, so each type keeps its chart colour
     }

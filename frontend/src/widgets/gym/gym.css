@@ -103,10 +103,13 @@
 .gym-legend li { display: grid; grid-template-columns: 12px 1fr auto; align-items: center; gap: 8px; font-size: 14px; }
 .gym-swatch { width: 12px; height: 12px; border-radius: 3px; background: var(--series); }
 .gym-legend-kind { font-weight: 600; }
-.gym-columns { display: flex; align-items: stretch; gap: 6px; height: 200px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+.gym-columns { display: flex; align-items: stretch; gap: 10px; height: 200px; padding-top: 18px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
 .gym-column { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .gym-column-track { flex: 1; width: 100%; max-width: 44px; display: flex; align-items: flex-end; }
-.gym-column-stack { width: 100%; display: flex; flex-direction: column-reverse; gap: 2px; border-radius: 4px 4px 0 0; overflow: hidden; }
+.gym-column-stack { width: 100%; display: flex; flex-direction: column-reverse; position: relative; }
+.gym-column-stack .gym-column-seg { border-radius: 4px 4px 0 0; }
+.gym-column-value { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); padding-bottom: 3px;
+  font-size: 11px; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .gym-column-seg { background: var(--series); min-height: 2px; flex-basis: 0; }
 .gym-column-label { font-size: 11px; color: var(--muted); white-space: nowrap; transform: translateY(18px); }
 .gym-columns { margin-bottom: 20px; }

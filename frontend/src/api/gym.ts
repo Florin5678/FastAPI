@@ -19,15 +19,13 @@ export type GymMonth = {
 
 export type GymStatsLevel = 'week' | 'month' | 'year'
 
-// Minutes per workout type for one week / month / year, in total and per column
-// (days of the week, weeks of the month, months of the year)
+// Minutes and sessions per workout type for one week / month / year
 export type GymStats = {
   level: GymStatsLevel
   label: string
   start: string
   end: string
   totals: { kind: string; sessions: number; minutes: number }[]
-  columns: { label: string; start: string; minutes: Record<string, number> }[]
   active_days: number
   kinds: string[] // routine order: fixes each type's colour
 }
