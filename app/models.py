@@ -151,10 +151,6 @@ class Workout(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-# (VocabCard / table vocab_cards belonged to the Language widget, removed 2026-09-30;
-# the table is left in place with the user's progress, nothing uses it.)
-
-
 class BudgetEntry(Base):
     """One amount in the Budget widget's log: a month, a category path of up to four
     levels (e.g. Expenses > Transport > Plane tickets > Dubai - Copenhagen) and an
