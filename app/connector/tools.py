@@ -38,7 +38,8 @@ INSTRUCTIONS = (
     "The user's journal is private and not available. "
     "You can add, edit and delete entries for the user: food (search_foods + log_food for any food, "
     "log_saved_food for saved ones, update_food, delete_food), workouts (log_workout, update_workout, "
-    "delete_workout), budget (add_budget_entry, update_budget_entry, delete_budget_entry, set_budget), "
+    "delete_workout), budget (add_budget_entry, update_budget_entry, delete_budget_entry, set_budget; expenses "
+    "use a fixed list of sub-categories, see add_budget_entry), "
     "and reminders (add_reminder, update_reminder, delete_reminder; they can repeat daily, weekly or monthly). "
     "When the user asks to be briefed (\"brief me\", \"what's my day like\", \"morning briefing\"...), call "
     "get_briefing first and answer from it, following its \"How to answer\" part."
@@ -488,13 +489,25 @@ def _path_text(path: list[str]) -> str:
     return " › ".join(path)
 
 
-@mcp.tool(annotations=WRITE)
+BUDGET_GUIDE = (
+    "How the user's budget log works: each entry is a month, a category path and a positive amount in the user's "
+    "currency (kr). The path's first level is \"Expenses\" or \"Income\". For expenses the second level MUST be "
+    "exactly one of these sub-categories (no others exist):\n"
+    + "\n".join(f"- {name}: {what}" for name, what in budget.EXPENSE_GUIDE.items())
+    + "\nThe third and fourth levels are free text: usually the shop/place or a group (\"Wolt\", \"Midttraffik + DSB\", "
+    "\"Wizz Air\") and then a detail such as a route (\"BLL - OTP\"). Spending abroad starts with the country's "
+    "flag emoji (\"🇷🇴El Dictador\"). Income sub-categories are free text (e.g. \"SU\", \"Salary\" > employer).\n"
+    "Before adding: call get_budget for that month. Its `paths` lists every path used so far: reuse an existing "
+    "path with its exact spelling when it fits instead of inventing a new name. The log keeps one total per path "
+    "per month, so if the month already has an entry with the same path, add to its amount with "
+    "update_budget_entry instead of creating a second one. If the right sub-category isn't clear, ask the user."
+)
+
+
+@mcp.tool(annotations=WRITE, description=(
+    "Budget: add a NEW income or expense entry. `path`: 1-4 levels, e.g. [\"Expenses\", \"Restaurant/Café\", \"Wolt\"] "
+    "or [\"Income\", \"SU\"]; `amount` positive; `month` like 2026-09 (default this month).\n\n" + BUDGET_GUIDE))
 def add_budget_entry(path: list[str], amount: float, month: Optional[str] = None) -> dict:
-    """Budget: add a NEW income or expense entry. `path`: 1-4 category levels, e.g. ["Expenses", "Groceries", "Netto"]
-    or ["Income", "SU"]. The top level is "Expenses" or "Income"; an expense's second level must be one of: Bank fees,
-    Barber, Charity/Donations, Club/Bar, Groceries, Household items, Loan repayments, Lodging, Other, Pharmacy, Rent,
-    Restaurant/Café, Shopping, Subscriptions, Transport (lower levels are free). `amount` is positive, in the user's
-    currency. `month` like 2026-09 (default this month)."""
     with _Call() as call:
         entry = _run(budget.add_entry, budget.EntryIn(month=_month(month), path=path, amount=amount), user=call.user, db=call.db)
         call.record("add_budget_entry", f'Added {_path_text(entry["path"])}: {entry["amount"]:.2f} ({entry["month"]})',
@@ -502,10 +515,12 @@ def add_budget_entry(path: list[str], amount: float, month: Optional[str] = None
         return entry
 
 
-@mcp.tool(annotations=EDIT)
+@mcp.tool(annotations=EDIT, description=(
+    "Budget: change an entry's amount, category path or month (ids from get_budget), e.g. to add a new purchase "
+    "to this month's total for that path. Paths follow the same rules as add_budget_entry: an expense's second "
+    "level must be one of " + ", ".join(budget.EXPENSE_CATEGORIES) + "."))
 def update_budget_entry(entry_id: int, amount: Optional[float] = None, path: Optional[list[str]] = None,
                         month: Optional[str] = None) -> dict:
-    """Budget: edit an existing entry's amount, category path or month (ids from get_budget)."""
     with _Call() as call:
         before = _budget_entry(call, entry_id)
         fields = {k: v for k, v in (("amount", amount), ("path", path), ("month", month)) if v is not None}

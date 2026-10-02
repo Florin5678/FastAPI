@@ -36,10 +36,26 @@ CSV_HEADER = ["Month", "Category", "Sub-category", "Sub-sub-category", "Sub-sub-
 # The top level is one of these; expenses must use one of the fixed sub-categories below
 # (lower levels, and income sub-categories, are free text)
 TOP_LEVELS = ["Expenses", "Income"]
-EXPENSE_CATEGORIES = sorted([
-    "Transport", "Rent", "Loan repayments", "Groceries", "Other", "Subscriptions", "Restaurant/Café", "Club/Bar",
-    "Shopping", "Barber", "Household items", "Pharmacy", "Bank fees", "Lodging", "Charity/Donations",
-], key=str.lower)
+# What belongs in each expense sub-category (for Claude, which files entries through the connector)
+EXPENSE_GUIDE = {
+    "Bank fees": "bank and card fees, currency exchange fees",
+    "Barber": "haircuts",
+    "Charity/Donations": "donations and charity",
+    "Club/Bar": "drinks and entry at bars and clubs, nightlife",
+    "Groceries": "supermarket and food shopping",
+    "Household items": "things for the home: furniture, kitchenware, cleaning supplies, electronics for the flat",
+    "Loan repayments": "loan instalments and payoffs",
+    "Lodging": "hotels, hostels, Airbnb",
+    "Other": "anything that fits nowhere else: dentist, vet, repairs, activities and tickets, sports fees, "
+             "money sent to people, ATM withdrawals",
+    "Pharmacy": "medicine, supplements, pharmacy purchases",
+    "Rent": "the monthly rent",
+    "Restaurant/Café": "eating out, cafés and coffee, canteens, takeaway and food delivery (Wolt, Glovo)",
+    "Shopping": "clothes, shoes, gifts, books, games and other personal purchases",
+    "Subscriptions": "recurring services: phone plan, internet, streaming, software, cloud storage, gym, union",
+    "Transport": "public transport and trains, flights, taxis and Uber, bike and scooter rentals, travel fees",
+}
+EXPENSE_CATEGORIES = sorted(EXPENSE_GUIDE, key=str.lower)
 
 
 # ---- Helpers ----
