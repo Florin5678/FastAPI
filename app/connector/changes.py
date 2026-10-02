@@ -40,11 +40,11 @@ def recent(db: Session, user: User, limit: int = 20) -> list[dict]:
 
 # ---- Undo actions ----
 
-def _restore_item(db: Session, user: User, kind: str, item: dict) -> None:
-    """Put a reminder/note back exactly as it was (same id)."""
+def _restore_reminder(db: Session, user: User, item: dict) -> None:
+    """Put a reminder back exactly as it was (same id)."""
     row = notes.widget_row(db, user, notes.WIDGET_ID)
-    items = [i for i in notes._items(row, kind) if i["id"] != item["id"]]
-    notes._save(row, kind, [*items, item])
+    items = [i for i in notes._items(row) if i["id"] != item["id"]]
+    notes._save(row, [*items, item])
     db.commit()
 
 
@@ -58,9 +58,7 @@ def _readd_food(db: Session, user: User, entry: dict) -> None:
 
 UNDO_ACTIONS: dict[str, Any] = {
     "delete_reminder": lambda db, user, a: notes.delete_reminder(a["id"], user=user, db=db),
-    "restore_reminder": lambda db, user, a: _restore_item(db, user, "reminders", a["item"]),
-    "delete_note": lambda db, user, a: notes.delete_note(a["id"], user=user, db=db),
-    "restore_note": lambda db, user, a: _restore_item(db, user, "notes", a["item"]),
+    "restore_reminder": lambda db, user, a: _restore_reminder(db, user, a["item"]),
     "delete_food": lambda db, user, a: nutrition.delete_entry(a["id"], user=user, db=db),
     "readd_food": lambda db, user, a: _readd_food(db, user, a["entry"]),
     "restore_food": lambda db, user, a: nutrition.update_entry(a["id"], nutrition.EntryPatch(
@@ -86,7 +84,9 @@ def undo(db: Session, user: User, change_id: int) -> dict:
         raise HTTPException(status_code=409, detail="That change was already undone")
     if not change.undo:
         raise HTTPException(status_code=422, detail="That change can't be undone")
-    action = UNDO_ACTIONS[change.undo["action"]]
+    action = UNDO_ACTIONS.get(change.undo["action"])
+    if action is None:  # e.g. a change to Notes, which no longer exist
+        raise HTTPException(status_code=422, detail="That change can't be undone any more")
     try:
         action(db, user, change.undo["args"])
     except HTTPException as e:

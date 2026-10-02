@@ -83,7 +83,7 @@ app.include_router(gmail_router, prefix="/gmail", tags=["gmail"])  # Gmail sync 
 app.include_router(mail_router, tags=["mail"])  # stored emails, summaries, digest
 app.include_router(widget_router, tags=["widgets"])  # generic widget registry, layout, settings, data
 app.include_router(nutrition_router)  # Nutrition widget: food log, history, food search (USDA + Open Food Facts)
-app.include_router(notes_router)  # Notes & reminders widget
+app.include_router(notes_router)  # Reminders widget
 app.include_router(journal_router)  # Journal widget: entries, prompts, locked history
 app.include_router(gym_router)  # Gym widget: log / delete workouts
 app.include_router(assistant_router)  # Assistant widget: prompt & briefing settings

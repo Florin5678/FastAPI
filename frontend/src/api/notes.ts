@@ -1,17 +1,26 @@
-// Notes & reminders widget
+// Reminders widget (its id is still "notes")
 import { json, request } from './client'
 
-export type Reminder = { id: string; text: string; due: string | null; done: boolean; created_at: string; done_at: string | null }
-export type Note = { id: string; text: string; pinned: boolean; created_at: string; updated_at: string }
+export type Repeat = 'daily' | 'weekly' | 'monthly'
+
+export type Reminder = {
+  id: string
+  text: string
+  due: string | null
+  repeat: Repeat | null // a repeating reminder moves to its next time when ticked
+  repeat_day: number | null // day of the month a monthly one keeps
+  done: boolean
+  created_at: string
+  done_at: string | null
+}
+
+// The browser's timezone: the server steps repeating reminders in local time
+const tz = () => Intl.DateTimeFormat().resolvedOptions().timeZone
 
 export const notesApi = {
-  addReminder: (text: string, due: string | null) =>
-    request<Reminder>('/widgets/notes/reminders', { method: 'POST', ...json({ text, due }) }),
-  updateReminder: (id: string, changes: Partial<Pick<Reminder, 'text' | 'due' | 'done'>>) =>
-    request<Reminder>(`/widgets/notes/reminders/${id}`, { method: 'PATCH', ...json(changes) }),
+  addReminder: (text: string, due: string | null, repeat: Repeat | null) =>
+    request<Reminder>('/widgets/notes/reminders', { method: 'POST', ...json({ text, due, repeat, tz: tz() }) }),
+  updateReminder: (id: string, changes: Partial<Pick<Reminder, 'text' | 'due' | 'done' | 'repeat'>>) =>
+    request<Reminder>(`/widgets/notes/reminders/${id}`, { method: 'PATCH', ...json({ ...changes, tz: tz() }) }),
   deleteReminder: (id: string) => request<unknown>(`/widgets/notes/reminders/${id}`, { method: 'DELETE' }),
-  addNote: (text: string) => request<Note>('/widgets/notes/notes', { method: 'POST', ...json({ text }) }),
-  updateNote: (id: string, changes: Partial<Pick<Note, 'text' | 'pinned'>>) =>
-    request<Note>(`/widgets/notes/notes/${id}`, { method: 'PATCH', ...json(changes) }),
-  deleteNote: (id: string) => request<unknown>(`/widgets/notes/notes/${id}`, { method: 'DELETE' }),
 }

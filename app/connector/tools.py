@@ -32,14 +32,14 @@ EDIT = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=
 DELETE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False)
 
 INSTRUCTIONS = (
-    "This is the user's personal dashboard (calendar, email, notes & reminders, nutrition, gym, budget, "
+    "This is the user's personal dashboard (calendar, email, reminders, nutrition, gym, budget, "
     "weather, news). Times are in the user's local timezone. Every change you make is logged on the dashboard "
     "and can be undone (see list_recent_changes / undo_change). Confirm with the user before deleting things. "
     "The user's journal is private and not available. "
     "You can add, edit and delete entries for the user: food (search_foods + log_food for any food, "
     "log_saved_food for saved ones, update_food, delete_food), workouts (log_workout, update_workout, "
     "delete_workout), budget (add_budget_entry, update_budget_entry, delete_budget_entry, set_budget), "
-    "reminders and notes. "
+    "and reminders (add_reminder, update_reminder, delete_reminder; they can repeat daily, weekly or monthly). "
     "When the user asks to be briefed (\"brief me\", \"what's my day like\", \"morning briefing\"...), call "
     "get_briefing first and answer from it, following its \"How to answer\" part."
 )
@@ -193,8 +193,8 @@ def get_email(email_id: int) -> dict:
 
 
 @mcp.tool(annotations=READ)
-def get_notes_and_reminders() -> dict:
-    """Open reminders (with due times), recently completed reminders, and notes (pinned first)."""
+def get_reminders() -> dict:
+    """Open reminders (soonest due first, with due times and how they repeat) and recently completed ones."""
     with _Call() as call:
         return _widget(call, "notes")
 
@@ -255,13 +255,13 @@ def get_news(topic: Optional[str] = None, limit: int = 10) -> dict:
         return _widget(call, "news", **overrides)
 
 
-# ---- Reminders & notes ----
+# ---- Reminders ----
 
-def _find_item(call: _Call, kind: str, item_id: str) -> dict:
+def _find_reminder(call: _Call, reminder_id: str) -> dict:
     row = _run(widget_row, call.db, call.user, notes.WIDGET_ID)
-    item = next((i for i in notes._items(row, kind) if i["id"] == item_id), None)
+    item = next((i for i in notes._items(row) if i["id"] == reminder_id), None)
     if item is None:
-        raise ToolError(f"{kind[:-1].capitalize()} not found")
+        raise ToolError("Reminder not found")
     return item
 
 
@@ -276,70 +276,46 @@ def _due(value: Optional[str]) -> Optional[datetime]:
 
 
 @mcp.tool(annotations=WRITE)
-def add_reminder(text: str, due: Optional[str] = None) -> dict:
-    """Notes & reminders: add a NEW reminder. `due`: optional local date-time like 2026-10-02T09:00."""
+def add_reminder(text: str, due: Optional[str] = None, repeat: Optional[notes.Repeat] = None) -> dict:
+    """Reminders: add a NEW reminder. `due`: optional local date-time like 2026-10-02T09:00. `repeat`:
+    "daily", "weekly" or "monthly" (monthly = on the due date's day of the month); needs a due time."""
     with _Call() as call:
-        item = _run(notes.add_reminder, notes.ReminderIn(text=text, due=_due(due)), user=call.user, db=call.db)
+        item = _run(notes.add_reminder, notes.ReminderIn(text=text, due=_due(due), repeat=repeat, tz=TIMEZONE),
+                    user=call.user, db=call.db)
         call.record("add_reminder", f'Added reminder "{item["text"]}"', {"action": "delete_reminder", "args": {"id": item["id"]}})
         return item
 
 
 @mcp.tool(annotations=EDIT)
 def update_reminder(reminder_id: str, text: Optional[str] = None, due: Optional[str] = None,
-                    clear_due: bool = False, done: Optional[bool] = None) -> dict:
-    """Change a reminder: its text, due time (or clear_due=true to remove it), or mark it done/not done."""
+                    clear_due: bool = False, repeat: Optional[str] = None, done: Optional[bool] = None) -> dict:
+    """Reminders: change a reminder's text, due time (or clear_due=true to remove it), `repeat` ("daily",
+    "weekly", "monthly", or "none" to stop repeating), or mark it done/not done. Marking a repeating
+    reminder done moves it to its next occurrence."""
     with _Call() as call:
-        before = _find_item(call, "reminders", reminder_id)
-        fields: dict[str, Any] = {}
+        before = _find_reminder(call, reminder_id)
+        fields: dict[str, Any] = {"tz": TIMEZONE}
         if text is not None:
             fields["text"] = text
         if due is not None or clear_due:
             fields["due"] = None if clear_due else _due(due)
+        if repeat is not None:
+            fields["repeat"] = None if repeat == "none" else repeat
         if done is not None:
             fields["done"] = done
         item = _run(notes.update_reminder, reminder_id, notes.ReminderPatch(**fields), user=call.user, db=call.db)
-        what = "Completed" if done else "Reopened" if done is False else "Changed"
+        what = ("Moved to the next time" if before.get("repeat") else "Completed") if done else "Reopened" if done is False else "Changed"
         call.record("update_reminder", f'{what} reminder "{item["text"]}"', {"action": "restore_reminder", "args": {"item": before}})
         return item
 
 
 @mcp.tool(annotations=DELETE)
 def delete_reminder(reminder_id: str) -> str:
-    """Delete a reminder (can be undone from the dashboard)."""
+    """Reminders: delete a reminder (can be undone from the dashboard)."""
     with _Call() as call:
-        before = _find_item(call, "reminders", reminder_id)
+        before = _find_reminder(call, reminder_id)
         _run(notes.delete_reminder, reminder_id, user=call.user, db=call.db)
         call.record("delete_reminder", f'Deleted reminder "{before["text"]}"', {"action": "restore_reminder", "args": {"item": before}})
-        return "Deleted"
-
-
-@mcp.tool(annotations=WRITE)
-def add_note(text: str) -> dict:
-    """Notes & reminders: add a NEW note."""
-    with _Call() as call:
-        item = _run(notes.add_note, notes.NoteIn(text=text), user=call.user, db=call.db)
-        call.record("add_note", f'Added note "{item["text"][:80]}"', {"action": "delete_note", "args": {"id": item["id"]}})
-        return item
-
-
-@mcp.tool(annotations=EDIT)
-def update_note(note_id: str, text: Optional[str] = None, pinned: Optional[bool] = None) -> dict:
-    """Change a note's text or pin/unpin it."""
-    with _Call() as call:
-        before = _find_item(call, "notes", note_id)
-        fields = {k: v for k, v in (("text", text), ("pinned", pinned)) if v is not None}
-        item = _run(notes.update_note, note_id, notes.NotePatch(**fields), user=call.user, db=call.db)
-        call.record("update_note", f'Changed note "{item["text"][:80]}"', {"action": "restore_note", "args": {"item": before}})
-        return item
-
-
-@mcp.tool(annotations=DELETE)
-def delete_note(note_id: str) -> str:
-    """Delete a note (can be undone from the dashboard)."""
-    with _Call() as call:
-        before = _find_item(call, "notes", note_id)
-        _run(notes.delete_note, note_id, user=call.user, db=call.db)
-        call.record("delete_note", f'Deleted note "{before["text"][:80]}"', {"action": "restore_note", "args": {"item": before}})
         return "Deleted"
 
 

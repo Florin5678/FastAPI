@@ -4,7 +4,7 @@
 import { EmailSummaryWidget } from './email/EmailSummaryWidget'
 import { WeatherWidget } from './weather/WeatherWidget'
 import { NutritionWidget } from './nutrition/NutritionWidget'
-import { NotesWidget } from './notes/NotesWidget'
+import { RemindersWidget } from './notes/RemindersWidget'
 import { NewsWidget } from './news/NewsWidget'
 import { JournalWidget } from './journal/JournalWidget'
 import { CalendarWidget } from './calendar/CalendarWidget'
@@ -18,7 +18,7 @@ export const WIDGET_UI: Record<string, WidgetUI> = {
   email_summary: { icon: '✉️', component: EmailSummaryWidget },
   weather: { icon: '🌤️', component: WeatherWidget },
   nutrition: { icon: '🥗', component: NutritionWidget },
-  notes: { icon: '📝', component: NotesWidget },
+  notes: { icon: '⏰', component: RemindersWidget },
   news: { icon: '📰', component: NewsWidget },
   journal: { icon: '📓', component: JournalWidget },
   calendar: { icon: '📅', component: CalendarWidget },

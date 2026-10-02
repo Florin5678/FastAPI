@@ -56,7 +56,7 @@ DEFAULT_CLAUDE_PROMPT = (
 )
 # How many items a widget's brief() sends by default (widgets not listed have no list)
 DEFAULT_LIMITS = {"email_summary": 15, "calendar": 25, "news": 3, "notes": 15, "nutrition": 10}
-ITEM_LABELS = {"news": "headlines per topic", "calendar": "events", "email_summary": "emails", "notes": "reminders/notes",
+ITEM_LABELS = {"news": "headlines per topic", "calendar": "events", "email_summary": "emails", "notes": "reminders",
                "nutrition": "foods per day"}
 # Widget settings used when fetching for the briefing (the tile may show less)
 BRIEF_SETTINGS = {"news": {"topic": "All", "max_items": 500}}
@@ -102,7 +102,7 @@ def default_settings() -> AssistantSettings:
             ExtraInstruction(name="Daily forecast", text="The day, week number, weather, moon phase and any holidays "
                              "or sky events (see Today), and my calendar events for today and the coming days."),
             ExtraInstruction(name="Email", text="Which emails are important and which need a reply today."),
-            ExtraInstruction(name="Urgent tasks", text="Which reminders are overdue or due soon (see Notes & reminders)."),
+            ExtraInstruction(name="Urgent tasks", text="Which reminders are overdue or due soon (see Reminders)."),
             ExtraInstruction(name="Health", text="Meal and workout suggestions based on what I've eaten and trained "
                              "recently (see Nutrition and Gym)."),
             ExtraInstruction(name="News digest", text="The few most important headlines (see News)."),
