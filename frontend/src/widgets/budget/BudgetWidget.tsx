@@ -15,6 +15,7 @@ export type BudgetData = {
   expenses: number
   history: { month: string; income: number; expenses: number }[] // last 6 months, oldest first
   paths: string[][]
+  expense_categories: string[]
 }
 
 export function BudgetWidget({ data, actions, reload }: WidgetProps<BudgetData>) {
@@ -58,6 +59,7 @@ export function BudgetWidget({ data, actions, reload }: WidgetProps<BudgetData>)
           title="Add entry"
           initial={{ month: data.month, path: ['Expenses'] }}
           paths={data.paths}
+          expenseCategories={data.expense_categories}
           onSave={async (entry) => { await budgetApi.add(entry); reload() }}
           onClose={() => setAdding(false)}
         />

@@ -33,6 +33,13 @@ HISTORY_MONTHS = 12
 TILE_MONTHS = 6  # months in the tile's income vs spending chart
 MONTH_RE = r"^\d{4}-(0[1-9]|1[0-2])$"
 CSV_HEADER = ["Month", "Category", "Sub-category", "Sub-sub-category", "Sub-sub-sub-category", "Amount"]
+# The top level is one of these; expenses must use one of the fixed sub-categories below
+# (lower levels, and income sub-categories, are free text)
+TOP_LEVELS = ["Expenses", "Income"]
+EXPENSE_CATEGORIES = sorted([
+    "Transport", "Rent", "Loan repayments", "Groceries", "Other", "Subscriptions", "Restaurant/Café", "Club/Bar",
+    "Shopping", "Barber", "Household items", "Pharmacy", "Bank fees", "Lodging", "Charity/Donations",
+], key=str.lower)
 
 
 # ---- Helpers ----
@@ -59,6 +66,22 @@ def _clean_path(path: list[str]) -> list[str]:
     if any(len(p) > 120 for p in levels):
         raise HTTPException(status_code=422, detail="Category names can be at most 120 characters")
     return levels
+
+
+def _check_categories(path: list[str]) -> list[str]:
+    """The path with its top level and (for expenses) sub-category checked against the fixed
+    lists and spelled as there; lower levels are free text."""
+    top = next((t for t in TOP_LEVELS if t.lower() == path[0].lower()), None)
+    if top is None:
+        raise HTTPException(status_code=422, detail='The category must be "Expenses" or "Income"')
+    path = [top, *path[1:]]
+    if top == "Expenses":
+        sub = next((c for c in EXPENSE_CATEGORIES if len(path) > 1 and c.lower() == path[1].lower()), None)
+        if sub is None:
+            given = f'"{path[1]}" is not an expense sub-category. ' if len(path) > 1 else "Expenses need a sub-category. "
+            raise HTTPException(status_code=422, detail=given + "Use one of: " + ", ".join(EXPENSE_CATEGORIES))
+        path[1] = sub
+    return path
 
 
 def _set_path(e: BudgetEntry, path: list[str]) -> None:
@@ -136,6 +159,7 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
             for m in (_shift_month(first, i) for i in range(TILE_MONTHS))
         ],
         "paths": _paths(db, user),
+        "expense_categories": EXPENSE_CATEGORIES,
     }
 
 
@@ -232,6 +256,7 @@ def month_report(month: str, user: User = Depends(get_current_user), db: Session
         "history": history,
         "first_month": first_month,
         "paths": _paths(db, user),
+        "expense_categories": EXPENSE_CATEGORIES,
     }
 
 
@@ -241,7 +266,7 @@ def add_entry(body: EntryIn, user: User = Depends(get_current_user), db: Session
     if db.query(func.count(BudgetEntry.id)).filter(BudgetEntry.user_id == user.id).scalar() >= MAX_ENTRIES:
         raise HTTPException(status_code=422, detail=f"You can keep up to {MAX_ENTRIES} entries")
     entry = BudgetEntry(user_id=user.id, month=body.month, amount=Decimal(str(round(body.amount, 2))))
-    _set_path(entry, _clean_path(body.path))
+    _set_path(entry, _check_categories(_clean_path(body.path)))
     db.add(entry)
     db.commit()
     return _entry_dict(entry)
@@ -255,7 +280,7 @@ def update_entry(entry_id: int, body: EntryPatch, user: User = Depends(get_curre
     if body.month is not None:
         entry.month = body.month
     if body.path is not None:
-        _set_path(entry, _clean_path(body.path))
+        _set_path(entry, _check_categories(_clean_path(body.path)))
     if body.amount is not None:
         entry.amount = Decimal(str(round(body.amount, 2)))
     db.commit()
@@ -287,7 +312,10 @@ def set_budgets(body: BudgetsIn, user: User = Depends(get_current_user), db: Ses
         if amount is not None and not 0 <= amount <= 1e9:
             raise HTTPException(status_code=422, detail="Budgets must be positive numbers")
         if name.strip() and amount:
-            budgets[name.strip()[:120]] = round(float(amount), 2)
+            category = next((c for c in EXPENSE_CATEGORIES if c.lower() == name.strip().lower()), None)
+            if category is None:
+                raise HTTPException(status_code=422, detail=f'"{name}" is not an expense sub-category')
+            budgets[category] = round(float(amount), 2)
     row = widget_row(db, user, WIDGET_ID)
     row.config = {**(row.config or {}), "budgets": budgets}
     db.commit()
@@ -359,6 +387,11 @@ def _parse_csv(text: str) -> tuple[list[tuple[str, list[str], float]], list[str]
             path.pop()
         if month is None or amount is None or not path or any(not p for p in path) or any(len(p) > 120 for p in path):
             problems.append(f"line {line}: {', '.join(row)[:80]}")
+            continue
+        try:
+            path = _check_categories(path)
+        except HTTPException as e:
+            problems.append(f"line {line}: {e.detail}"[:160])
             continue
         entries.append((month, path, round(amount, 2)))
     return entries, problems

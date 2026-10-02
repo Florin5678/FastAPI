@@ -112,6 +112,7 @@ export function BudgetPage() {
           title="Add entry"
           initial={{ month, path: editing.path }}
           paths={data.paths}
+          expenseCategories={data.expense_categories}
           onSave={async (entry) => { await budgetApi.add(entry); reload() }}
           onClose={() => setEditing(null)}
         />
@@ -121,6 +122,7 @@ export function BudgetPage() {
           title="Edit entry"
           initial={editing.entry}
           paths={data.paths}
+          expenseCategories={data.expense_categories}
           onSave={async (entry) => { await budgetApi.update(editing.entry.id, entry); reload() }}
           onDelete={async () => { await budgetApi.remove(editing.entry.id); reload() }}
           onClose={() => setEditing(null)}

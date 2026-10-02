@@ -14,6 +14,7 @@ export type BudgetMonth = {
   history: { month: string; income: number; expenses: number }[]
   first_month: string | null
   paths: string[][]
+  expense_categories: string[] // the fixed sub-categories under Expenses, alphabetical
 }
 
 export const budgetApi = {

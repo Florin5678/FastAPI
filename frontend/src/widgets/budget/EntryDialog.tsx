@@ -2,12 +2,16 @@ import { useMemo, useState } from 'react'
 import { Dialog } from '../../components/Dialog'
 import { LEVEL_NAMES } from './budgetUtils'
 
-// Add or edit one entry: month, up to four category levels (with suggestions from the
-// existing log) and the amount
-export function EntryDialog({ title, initial, paths, onSave, onDelete, onClose }: {
+const TOP_LEVELS = ['Expenses', 'Income']
+
+// Add or edit one entry: month, up to four category levels and the amount. The category is
+// Expenses or Income; an expense's sub-category is one of the fixed list (the server checks
+// too); lower levels and income sub-categories are free text, with suggestions from the log.
+export function EntryDialog({ title, initial, paths, expenseCategories, onSave, onDelete, onClose }: {
   title: string
   initial: { month: string; path: string[]; amount?: number }
   paths: string[][]
+  expenseCategories: string[]
   onSave: (entry: { month: string; path: string[]; amount: number }) => Promise<void>
   onDelete?: () => Promise<void>
   onClose: () => void
@@ -31,7 +35,11 @@ export function EntryDialog({ title, initial, paths, onSave, onDelete, onClose }
   while (path.length && !path[path.length - 1]) path.pop()
   const gap = path.some((l) => !l)
   const value = Number(amount.replace(',', '.'))
-  const valid = /^\d{4}-(0[1-9]|1[0-2])$/.test(month) && path.length > 0 && !gap && amount.trim() !== '' && Number.isFinite(value)
+  const isExpense = levels[0] === 'Expenses'
+  const subMissing = isExpense && !expenseCategories.includes(levels[1])
+  const valid = /^\d{4}-(0[1-9]|1[0-2])$/.test(month) && TOP_LEVELS.includes(levels[0]) && !subMissing &&
+    !gap && amount.trim() !== '' && Number.isFinite(value)
+  const setLevel = (i: number, text: string) => setLevels(levels.map((l, j) => (j === i ? text : l)))
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true)
@@ -52,22 +60,43 @@ export function EntryDialog({ title, initial, paths, onSave, onDelete, onClose }
           <span>Month</span>
           <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} required />
         </label>
-        {LEVEL_NAMES.map((name, i) => (
-          <label key={name}>
-            <span>{name}{i > 0 && <span className="muted"> (optional)</span>}</span>
-            <input
-              list={`budget-level-${i}`}
-              value={levels[i]}
-              onChange={(e) => setLevels(levels.map((l, j) => (j === i ? e.target.value : l)))}
-              placeholder={i === 0 ? 'Expenses or Income' : ''}
-              maxLength={120}
-              disabled={i > 0 && !levels[i - 1].trim() && !levels[i].trim()}
-            />
-            <datalist id={`budget-level-${i}`}>
-              {suggestions[i].map((s) => <option key={s} value={s} />)}
-            </datalist>
-          </label>
-        ))}
+        <label>
+          <span>{LEVEL_NAMES[0]}</span>
+          <select value={levels[0]} required
+            onChange={(e) => setLevels([e.target.value, ...levels.slice(1).map((l) => (e.target.value === levels[0] ? l : ''))])}>
+            {!TOP_LEVELS.includes(levels[0]) && <option value="">Choose…</option>}
+            {TOP_LEVELS.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </label>
+        {LEVEL_NAMES.slice(1).map((name, k) => {
+          const i = k + 1
+          if (i === 1 && isExpense) {
+            return (
+              <label key={name}>
+                <span>{name}</span>
+                <select value={expenseCategories.includes(levels[1]) ? levels[1] : ''} required onChange={(e) => setLevel(1, e.target.value)}>
+                  <option value="" disabled>Choose…</option>
+                  {expenseCategories.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </label>
+            )
+          }
+          return (
+            <label key={name}>
+              <span>{name} <span className="muted">(optional)</span></span>
+              <input
+                list={`budget-level-${i}`}
+                value={levels[i]}
+                onChange={(e) => setLevel(i, e.target.value)}
+                maxLength={120}
+                disabled={!levels[i - 1].trim() && !levels[i].trim()}
+              />
+              <datalist id={`budget-level-${i}`}>
+                {suggestions[i].map((s) => <option key={s} value={s} />)}
+              </datalist>
+            </label>
+          )
+        })}
         <label>
           <span>Amount</span>
           <input type="text" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />

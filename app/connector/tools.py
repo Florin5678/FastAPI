@@ -491,7 +491,10 @@ def _path_text(path: list[str]) -> str:
 @mcp.tool(annotations=WRITE)
 def add_budget_entry(path: list[str], amount: float, month: Optional[str] = None) -> dict:
     """Budget: add a NEW income or expense entry. `path`: 1-4 category levels, e.g. ["Expenses", "Groceries", "Netto"]
-    or ["Income", "SU"]. `amount` is positive, in the user's currency. `month` like 2026-09 (default this month)."""
+    or ["Income", "SU"]. The top level is "Expenses" or "Income"; an expense's second level must be one of: Bank fees,
+    Barber, Charity/Donations, Club/Bar, Groceries, Household items, Loan repayments, Lodging, Other, Pharmacy, Rent,
+    Restaurant/Café, Shopping, Subscriptions, Transport (lower levels are free). `amount` is positive, in the user's
+    currency. `month` like 2026-09 (default this month)."""
     with _Call() as call:
         entry = _run(budget.add_entry, budget.EntryIn(month=_month(month), path=path, amount=amount), user=call.user, db=call.db)
         call.record("add_budget_entry", f'Added {_path_text(entry["path"])}: {entry["amount"]:.2f} ({entry["month"]})',

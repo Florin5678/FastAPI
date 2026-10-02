@@ -11,11 +11,11 @@
 /* Add / edit entry form */
 .budget-form { display: flex; flex-direction: column; gap: 10px; }
 .budget-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 550; }
-.budget-form input {
+.budget-form input, .budget-form select {
   height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--surface); color: var(--text); font: inherit; font-weight: 400; font-size: 14px;
 }
-.budget-form input:disabled { opacity: 0.5; }
+.budget-form input:disabled, .budget-form select:disabled { opacity: 0.5; }
 .budget-form .dialog-actions { align-items: center; }
 
 /* Monthly report page */
