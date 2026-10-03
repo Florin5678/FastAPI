@@ -32,12 +32,22 @@ EDIT = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=
 DELETE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False)
 
 MEAL_GUIDE = (
-    "When the user asks for meal suggestions or what to eat or cook (also when a briefing section asks for meal "
-    "suggestions): first call get_nutrition (today) to see what they've eaten and what's still missing toward "
-    "their goals, and get_pantry to see the food they have at home. Then suggest meals that cover the missing "
-    "nutrients (and stay under the limits, e.g. sugar and saturated fat) using as many pantry items as possible, "
-    "soonest best-before first. For each meal, say which pantry items it uses, anything they'd need to buy, and "
-    "roughly what it adds (kcal, protein). When they say they used up, finished or bought food, update the pantry."
+    "When the user asks for meal suggestions, a meal plan or what to eat or cook (also when a briefing section "
+    "asks for meal suggestions), call plan_meals: it returns the meals still ahead today, their goals and what "
+    "they've eaten, the last week's pattern and their pantry, plus how to plan. When they say they used up, "
+    "finished or bought food, update the pantry."
+)
+PLAN_GUIDE = (
+    "Plan ONLY the meals in upcoming_meals (it is local_time now: don't suggest meals that are already over, e.g. "
+    "no breakfast in the evening; if the list is empty, at most suggest a light snack). Split what's `remaining` "
+    "of today's goals across those meals (more at main meals than snacks) and stay within what's left of the "
+    "limits (sugar, saturated fat). Build the meals from the pantry first, using items with the fewest days_left "
+    "first; keep things to buy to a minimum. Lean towards the nutrients in last_7_days.often_short, go easy on "
+    "often_over_limit, and avoid repeating recent_foods. Respect the user's diet and preferences. For each meal "
+    "give: a name, the ingredients with rough amounts (mark the pantry items), approximate kcal / protein / carbs "
+    "/ fat / fiber, and a one-line method. Finish with how the plan covers today's remaining goals and a short "
+    "shopping list (if anything is needed). Offer to log a meal once they've eaten it (log_food) and to update "
+    "the pantry."
 )
 
 INSTRUCTIONS = (
@@ -50,7 +60,7 @@ INSTRUCTIONS = (
     "delete_workout), budget (add_budget_entry, update_budget_entry, delete_budget_entry, set_budget; expenses "
     "use a fixed list of sub-categories, see add_budget_entry), "
     "and reminders (add_reminder, update_reminder, delete_reminder; they can repeat daily, weekly or monthly). "
-    "They keep a pantry (get_pantry; add_pantry_items for one or many items in a single call, "
+    "For meal suggestions use plan_meals. They keep a pantry (get_pantry; add_pantry_items for one or many items in a single call, "
     "update_pantry_item, delete_pantry_item). "
     + MEAL_GUIDE + " "
     "When the user asks to be briefed (\"brief me\", \"what's my day like\", \"morning briefing\"...), call "
@@ -442,6 +452,19 @@ def log_saved_food(food: str, grams: Optional[float] = None, day: Optional[str] 
         call.record("log_food", f'Logged {entry["name"]}, {round(amount)} g ({round(nutrients["calories"])} kcal) on {entry["day"]}',
                     {"action": "delete_food", "args": {"id": entry["id"]}})
         return entry
+
+
+# ---- Meal planning ----
+
+@mcp.tool(annotations=READ, description=(
+    "Nutrition: plan the rest of today's meals. Returns the local time and the meals still ahead, today's goals "
+    "with what's eaten and what's remaining, the last 7 days' averages (often short / often over), foods eaten "
+    "recently, the pantry (soonest best-before first) and `how_to_plan`. Use it whenever the user asks for meal "
+    "suggestions or a meal plan.\n\n" + PLAN_GUIDE))
+def plan_meals() -> dict:
+    with _Call() as call:
+        _run(widget_row, call.db, call.user, nutrition.WIDGET_ID)
+        return {**nutrition.meal_plan_context(call.db, call.user, datetime.now(_zone())), "how_to_plan": PLAN_GUIDE}
 
 
 # ---- Pantry (food at home; not part of the briefing) ----

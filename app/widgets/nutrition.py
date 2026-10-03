@@ -25,6 +25,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
+from datetime import time as clock
 from typing import Optional
 from urllib.parse import quote, urlencode
 
@@ -397,6 +398,67 @@ def delete_entry(entry_id: int, user: User = Depends(get_current_user), db: Sess
     db.delete(entry)
     db.commit()
     return {"deleted": entry_id}
+
+
+# ---- Meal planning (the connector's plan_meals) ----
+
+# Meals of the day and when each one is over (local time); only the ones still ahead get planned
+MEALS = [("breakfast", clock(10, 30)), ("lunch", clock(14, 30)), ("afternoon snack", clock(17, 0)),
+         ("dinner", clock(21, 0)), ("evening snack", clock(23, 30))]
+HISTORY_DAYS = 7
+RECENT_FOOD_DAYS = 3
+
+
+def meal_plan_context(db: Session, user: User, now: datetime) -> dict:
+    """Everything needed to plan the rest of today's meals: the meals still ahead, today's goals
+    vs what's eaten, the last week's pattern, recent foods (for variety) and the pantry."""
+    today = now.date()
+    summary = day_summary(db, user, today)
+    nutrients = [
+        {"nutrient": n["label"], "unit": n["unit"], "kind": n["kind"], "goal": n["goal"], "eaten": n["actual"],
+         # goals: how much is still missing; limits: how much is left before going over (negative = over)
+         "remaining": round(max(n["goal"] - n["actual"], 0) if n["kind"] == "goal" else n["goal"] - n["actual"], 1)}
+        for n in summary["nutrients"]
+    ]
+
+    past = history(end=today - timedelta(days=1), days=HISTORY_DAYS, user=user, db=db)["days"]
+    logged = [d for d in past if d["entries"]]
+    averages, often_short, often_over = [], [], []
+    for i, (_key, label, unit, kind, _) in enumerate(NUTRIENTS):
+        if not logged:
+            break
+        avg = sum(d["nutrients"][i]["actual"] for d in logged) / len(logged)
+        goal = sum(d["nutrients"][i]["goal"] for d in logged) / len(logged)
+        averages.append({"nutrient": label, "unit": unit, "daily_average": round(avg, 1), "goal": round(goal, 1)})
+        if kind == "goal" and goal and avg < 0.85 * goal:
+            often_short.append(label)
+        if kind == "limit" and goal and avg > goal:
+            often_over.append(label)
+
+    recent = (
+        db.query(NutritionEntry.name)
+        .filter(NutritionEntry.user_id == user.id, NutritionEntry.day >= today - timedelta(days=RECENT_FOOD_DAYS),
+                NutritionEntry.day < today)
+        .distinct()
+        .all()
+    )
+    pantry = []
+    for item in _pantry(widget_row(db, user, WIDGET_ID)):
+        days_left = (date.fromisoformat(item["expires"]) - today).days if item.get("expires") else None
+        pantry.append({"name": item["name"], "amount": item["amount"], "best_before": item.get("expires"),
+                       "days_left": days_left})
+    pantry.sort(key=lambda i: (i["days_left"] is None, i["days_left"] if i["days_left"] is not None else 0))
+
+    return {
+        "local_time": now.strftime("%A %d %B %Y, %H:%M"),
+        "upcoming_meals": [name for name, ends in MEALS if now.time() < ends],
+        "today": {"nutrients": nutrients, "eaten": [f"{e['name']}" + (f" ({e['grams']:g} g)" if e["grams"] else "")
+                                                    for e in reversed(summary["entries"])]},
+        "last_7_days": {"days_logged": len(logged), "averages": averages, "often_short": often_short,
+                        "often_over_limit": often_over},
+        "recent_foods": sorted(name for (name,) in recent),
+        "pantry": pantry,  # soonest best-before first
+    }
 
 
 # ---- Pantry ----
