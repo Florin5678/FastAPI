@@ -442,6 +442,39 @@ def add_pantry_item(body: PantryItemIn, user: User = Depends(get_current_user), 
     return item
 
 
+def add_pantry_items(db: Session, user: User, new: list[PantryItemIn]) -> dict:
+    """Add several items at once; an item whose name is already in the pantry (any case)
+    gets its amount/best-before updated instead of a duplicate. Returns what changed,
+    with the previous versions of updated items (for undo)."""
+    row = widget_row(db, user, WIDGET_ID)
+    items = _pantry(row)
+    by_name = {i["name"].lower(): i for i in items}
+    now = datetime.now(timezone.utc).isoformat()
+    added, updated, before = [], [], []
+    for body in new:
+        name = body.name.strip()
+        existing = by_name.get(name.lower())
+        if existing:
+            before.append(dict(existing))
+            if body.amount.strip():
+                existing["amount"] = body.amount.strip()
+            if body.expires:
+                existing["expires"] = body.expires.isoformat()
+            existing["updated_at"] = now
+            updated.append(existing)
+        else:
+            item = {"id": uuid.uuid4().hex[:12], "name": name, "amount": body.amount.strip(),
+                    "expires": body.expires.isoformat() if body.expires else None, "added_at": now, "updated_at": now}
+            items.append(item)
+            by_name[name.lower()] = item
+            added.append(item)
+    if len(items) > MAX_PANTRY_ITEMS:
+        raise HTTPException(status_code=422, detail=f"The pantry holds up to {MAX_PANTRY_ITEMS} items")
+    _store_pantry(row, items)
+    db.commit()
+    return {"added": added, "updated": updated, "before": before}
+
+
 @router.patch("/pantry/{item_id}")
 def update_pantry_item(item_id: str, body: PantryItemPatch, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     row = widget_row(db, user, WIDGET_ID)

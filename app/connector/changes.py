@@ -56,6 +56,15 @@ def _restore_pantry_item(db: Session, user: User, item: dict) -> None:
     db.commit()
 
 
+def _undo_pantry_items(db: Session, user: User, added: list[str], before: list[dict]) -> None:
+    """Undo add_pantry_items: remove the items it added, put the ones it updated back."""
+    row = nutrition.widget_row(db, user, nutrition.WIDGET_ID)
+    restored = {i["id"]: i for i in before}
+    items = [restored.get(i["id"], i) for i in nutrition._pantry(row) if i["id"] not in added]
+    nutrition._store_pantry(row, items)
+    db.commit()
+
+
 def _readd_food(db: Session, user: User, entry: dict) -> None:
     nutrition.add_entry(nutrition.EntryIn(
         day=date.fromisoformat(entry["day"]), name=entry["name"], grams=entry.get("grams"),
@@ -71,6 +80,7 @@ UNDO_ACTIONS: dict[str, Any] = {
     "readd_food": lambda db, user, a: _readd_food(db, user, a["entry"]),
     "delete_pantry_item": lambda db, user, a: nutrition.delete_pantry_item(a["id"], user=user, db=db),
     "restore_pantry_item": lambda db, user, a: _restore_pantry_item(db, user, a["item"]),
+    "undo_pantry_items": lambda db, user, a: _undo_pantry_items(db, user, a["added"], a["before"]),
     "restore_food": lambda db, user, a: nutrition.update_entry(a["id"], nutrition.EntryPatch(
         day=date.fromisoformat(a["entry"]["day"]), name=a["entry"]["name"], grams=a["entry"].get("grams"),
         nutrients=nutrition.Nutrients(**a["entry"]["nutrients"]),

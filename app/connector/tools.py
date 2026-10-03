@@ -50,7 +50,8 @@ INSTRUCTIONS = (
     "delete_workout), budget (add_budget_entry, update_budget_entry, delete_budget_entry, set_budget; expenses "
     "use a fixed list of sub-categories, see add_budget_entry), "
     "and reminders (add_reminder, update_reminder, delete_reminder; they can repeat daily, weekly or monthly). "
-    "They keep a pantry (get_pantry, add_pantry_item, update_pantry_item, delete_pantry_item). "
+    "They keep a pantry (get_pantry; add_pantry_items for one or many items in a single call, "
+    "update_pantry_item, delete_pantry_item). "
     + MEAL_GUIDE + " "
     "When the user asks to be briefed (\"brief me\", \"what's my day like\", \"morning briefing\"...), call "
     "get_briefing first and answer from it, following its \"How to answer\" part."
@@ -462,14 +463,20 @@ def get_pantry() -> dict:
 
 
 @mcp.tool(annotations=WRITE)
-def add_pantry_item(name: str, amount: str = "", expires: Optional[str] = None) -> dict:
-    """Pantry: add a NEW food item the user has at home. `amount`: free text like "500 g", "6" or "half a bag";
-    `expires`: optional best-before date like 2026-10-12."""
+def add_pantry_items(items: list[nutrition.PantryItemIn]) -> dict:
+    """Pantry: add food items the user has at home - one or a whole list in a single call (use this when the
+    user gives a list). Each item: `name`, optional `amount` (free text like "500 g", "6", "half a bag") and
+    optional `expires` (best-before date like 2026-10-12). An item already in the pantry (same name) gets its
+    amount/date updated instead of a duplicate. Undoable as one change."""
     with _Call() as call:
-        item = _run(nutrition.add_pantry_item, nutrition.PantryItemIn(name=name, amount=amount, expires=_day(expires) if expires else None),
-                    user=call.user, db=call.db)
-        call.record("add_pantry_item", f'Added {item["name"]} to the pantry', {"action": "delete_pantry_item", "args": {"id": item["id"]}})
-        return item
+        if not items:
+            raise ToolError("Give at least one item")
+        result = _run(nutrition.add_pantry_items, call.db, call.user, items)
+        names = [i["name"] for i in result["added"] + result["updated"]]
+        summary = f"Pantry: added {len(result['added'])}, updated {len(result['updated'])} ({', '.join(names)[:150]})"
+        call.record("add_pantry_items", summary, {"action": "undo_pantry_items", "args": {
+            "added": [i["id"] for i in result["added"]], "before": result["before"]}})
+        return {"added": result["added"], "updated": result["updated"]}
 
 
 @mcp.tool(annotations=EDIT)
