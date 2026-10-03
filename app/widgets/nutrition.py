@@ -9,6 +9,10 @@
 # saved to "My foods" (widget row config["saved_foods"], values per 100 g) and
 # picked again later.
 #
+# Pantry: the food the user has at home (config["pantry"]: name, amount as free text,
+# optional best-before date). Shown from the tile's 🥫 Pantry button and used by Claude for
+# meal suggestions; deliberately not part of fetch(), so it stays out of the briefing.
+#
 # Food lookup, both free and searched together:
 # - USDA FoodData Central: generic foods and dishes (needs a free key from
 #   https://fdc.nal.usda.gov/api-key-signup.html in USDA_API_KEY - the shared
@@ -72,6 +76,7 @@ DEFAULT_GOALS = {
 }
 GOAL_MAX = {"calories": 10000}
 MAX_SAVED_FOODS = 300
+MAX_PANTRY_ITEMS = 300
 
 _search_cache: dict[str, tuple[float, list]] = {}
 
@@ -392,6 +397,79 @@ def delete_entry(entry_id: int, user: User = Depends(get_current_user), db: Sess
     db.delete(entry)
     db.commit()
     return {"deleted": entry_id}
+
+
+# ---- Pantry ----
+
+class PantryItemIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    amount: str = Field("", max_length=60)  # free text: "500 g", "6", "half a bag"
+    expires: Optional[date] = None  # best before
+
+
+class PantryItemPatch(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=120)
+    amount: Optional[str] = Field(None, max_length=60)
+    expires: Optional[date] = None  # send null to clear
+
+
+def _pantry(row) -> list[dict]:
+    return [dict(i) for i in (row.config or {}).get("pantry", [])]
+
+
+def _store_pantry(row, items: list[dict]) -> list[dict]:
+    items.sort(key=lambda i: i["name"].lower())  # alphabetical
+    row.config = {**(row.config or {}), "pantry": items}  # JSON columns aren't mutation-tracked
+    return items
+
+
+@router.get("/pantry")
+def list_pantry(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return {"items": _pantry(widget_row(db, user, WIDGET_ID))}
+
+
+@router.post("/pantry")
+def add_pantry_item(body: PantryItemIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = widget_row(db, user, WIDGET_ID)
+    items = _pantry(row)
+    if len(items) >= MAX_PANTRY_ITEMS:
+        raise HTTPException(status_code=422, detail=f"The pantry holds up to {MAX_PANTRY_ITEMS} items")
+    now = datetime.now(timezone.utc).isoformat()
+    item = {"id": uuid.uuid4().hex[:12], "name": body.name.strip(), "amount": body.amount.strip(),
+            "expires": body.expires.isoformat() if body.expires else None, "added_at": now, "updated_at": now}
+    _store_pantry(row, [*items, item])
+    db.commit()
+    return item
+
+
+@router.patch("/pantry/{item_id}")
+def update_pantry_item(item_id: str, body: PantryItemPatch, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = widget_row(db, user, WIDGET_ID)
+    items = _pantry(row)
+    item = next((i for i in items if i["id"] == item_id), None)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Pantry item not found")
+    if body.name is not None:
+        item["name"] = body.name.strip()
+    if body.amount is not None:
+        item["amount"] = body.amount.strip()
+    if "expires" in body.model_fields_set:
+        item["expires"] = body.expires.isoformat() if body.expires else None
+    item["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _store_pantry(row, items)
+    db.commit()
+    return item
+
+
+@router.delete("/pantry/{item_id}")
+def delete_pantry_item(item_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = widget_row(db, user, WIDGET_ID)
+    items = _pantry(row)
+    if not any(i["id"] == item_id for i in items):
+        raise HTTPException(status_code=404, detail="Pantry item not found")
+    _store_pantry(row, [i for i in items if i["id"] != item_id])
+    db.commit()
+    return {"deleted": item_id}
 
 
 def _per_100g(food: dict) -> dict:

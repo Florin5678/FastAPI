@@ -48,6 +48,14 @@ def _restore_reminder(db: Session, user: User, item: dict) -> None:
     db.commit()
 
 
+def _restore_pantry_item(db: Session, user: User, item: dict) -> None:
+    """Put a pantry item back exactly as it was (same id)."""
+    row = nutrition.widget_row(db, user, nutrition.WIDGET_ID)
+    items = [i for i in nutrition._pantry(row) if i["id"] != item["id"]]
+    nutrition._store_pantry(row, [*items, item])
+    db.commit()
+
+
 def _readd_food(db: Session, user: User, entry: dict) -> None:
     nutrition.add_entry(nutrition.EntryIn(
         day=date.fromisoformat(entry["day"]), name=entry["name"], grams=entry.get("grams"),
@@ -61,6 +69,8 @@ UNDO_ACTIONS: dict[str, Any] = {
     "restore_reminder": lambda db, user, a: _restore_reminder(db, user, a["item"]),
     "delete_food": lambda db, user, a: nutrition.delete_entry(a["id"], user=user, db=db),
     "readd_food": lambda db, user, a: _readd_food(db, user, a["entry"]),
+    "delete_pantry_item": lambda db, user, a: nutrition.delete_pantry_item(a["id"], user=user, db=db),
+    "restore_pantry_item": lambda db, user, a: _restore_pantry_item(db, user, a["item"]),
     "restore_food": lambda db, user, a: nutrition.update_entry(a["id"], nutrition.EntryPatch(
         day=date.fromisoformat(a["entry"]["day"]), name=a["entry"]["name"], grams=a["entry"].get("grams"),
         nutrients=nutrition.Nutrients(**a["entry"]["nutrients"]),

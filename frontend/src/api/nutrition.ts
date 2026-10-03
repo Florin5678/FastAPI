@@ -60,6 +60,10 @@ export type NutritionHistory = {
   first_logged_day: string | null
 }
 
+// Food at home (not part of the briefing; Claude uses it for meal suggestions)
+export type PantryItem = { id: string; name: string; amount: string; expires: string | null; added_at: string; updated_at: string }
+export type PantryItemIn = { name: string; amount: string; expires: string | null }
+
 export const nutritionApi = {
   searchFoods: (q: string) => request<FoodResult[]>(`/widgets/nutrition/foods?q=${encodeURIComponent(q)}`),
   addEntry: (day: string, entry: NewEntry) =>
@@ -71,4 +75,9 @@ export const nutritionApi = {
   deleteEntry: (id: number) => request<unknown>(`/widgets/nutrition/entries/${id}`, { method: 'DELETE' }),
   getDay: (day: string) => request<NutritionDayData>(`/widgets/nutrition/days/${day}`),
   history: (end: string, days: number) => request<NutritionHistory>(`/widgets/nutrition/history?end=${end}&days=${days}`),
+  pantry: () => request<{ items: PantryItem[] }>('/widgets/nutrition/pantry'),
+  addPantryItem: (item: PantryItemIn) => request<PantryItem>('/widgets/nutrition/pantry', { method: 'POST', ...json(item) }),
+  updatePantryItem: (id: string, item: PantryItemIn) =>
+    request<PantryItem>(`/widgets/nutrition/pantry/${id}`, { method: 'PATCH', ...json(item) }),
+  deletePantryItem: (id: string) => request<unknown>(`/widgets/nutrition/pantry/${id}`, { method: 'DELETE' }),
 }

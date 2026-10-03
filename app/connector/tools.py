@@ -31,6 +31,15 @@ WRITE = ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint
 EDIT = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False)
 DELETE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False)
 
+MEAL_GUIDE = (
+    "When the user asks for meal suggestions or what to eat or cook (also when a briefing section asks for meal "
+    "suggestions): first call get_nutrition (today) to see what they've eaten and what's still missing toward "
+    "their goals, and get_pantry to see the food they have at home. Then suggest meals that cover the missing "
+    "nutrients (and stay under the limits, e.g. sugar and saturated fat) using as many pantry items as possible, "
+    "soonest best-before first. For each meal, say which pantry items it uses, anything they'd need to buy, and "
+    "roughly what it adds (kcal, protein). When they say they used up, finished or bought food, update the pantry."
+)
+
 INSTRUCTIONS = (
     "This is the user's personal dashboard (calendar, email, reminders, nutrition, gym, budget, "
     "weather, news). Times are in the user's local timezone. Every change you make is logged on the dashboard "
@@ -41,6 +50,8 @@ INSTRUCTIONS = (
     "delete_workout), budget (add_budget_entry, update_budget_entry, delete_budget_entry, set_budget; expenses "
     "use a fixed list of sub-categories, see add_budget_entry), "
     "and reminders (add_reminder, update_reminder, delete_reminder; they can repeat daily, weekly or monthly). "
+    "They keep a pantry (get_pantry, add_pantry_item, update_pantry_item, delete_pantry_item). "
+    + MEAL_GUIDE + " "
     "When the user asks to be briefed (\"brief me\", \"what's my day like\", \"morning briefing\"...), call "
     "get_briefing first and answer from it, following its \"How to answer\" part."
 )
@@ -430,6 +441,60 @@ def log_saved_food(food: str, grams: Optional[float] = None, day: Optional[str] 
         call.record("log_food", f'Logged {entry["name"]}, {round(amount)} g ({round(nutrients["calories"])} kcal) on {entry["day"]}',
                     {"action": "delete_food", "args": {"id": entry["id"]}})
         return entry
+
+
+# ---- Pantry (food at home; not part of the briefing) ----
+
+def _find_pantry_item(call: _Call, item_id: str) -> dict:
+    row = _run(widget_row, call.db, call.user, nutrition.WIDGET_ID)
+    item = next((i for i in nutrition._pantry(row) if i["id"] == item_id), None)
+    if item is None:
+        raise ToolError("Pantry item not found (ids from get_pantry)")
+    return item
+
+
+@mcp.tool(annotations=READ, description=(
+    "Pantry: the food the user has at home (id, name, amount, best-before date `expires`), in alphabetical "
+    "order.\n\n" + MEAL_GUIDE))
+def get_pantry() -> dict:
+    with _Call() as call:
+        return _run(nutrition.list_pantry, user=call.user, db=call.db)
+
+
+@mcp.tool(annotations=WRITE)
+def add_pantry_item(name: str, amount: str = "", expires: Optional[str] = None) -> dict:
+    """Pantry: add a NEW food item the user has at home. `amount`: free text like "500 g", "6" or "half a bag";
+    `expires`: optional best-before date like 2026-10-12."""
+    with _Call() as call:
+        item = _run(nutrition.add_pantry_item, nutrition.PantryItemIn(name=name, amount=amount, expires=_day(expires) if expires else None),
+                    user=call.user, db=call.db)
+        call.record("add_pantry_item", f'Added {item["name"]} to the pantry', {"action": "delete_pantry_item", "args": {"id": item["id"]}})
+        return item
+
+
+@mcp.tool(annotations=EDIT)
+def update_pantry_item(item_id: str, name: Optional[str] = None, amount: Optional[str] = None,
+                       expires: Optional[str] = None, clear_expires: bool = False) -> dict:
+    """Pantry: change an item's name, amount (e.g. what's left after cooking) or best-before date (or
+    clear_expires=true). Ids from get_pantry. Use delete_pantry_item when something is used up."""
+    with _Call() as call:
+        before = _find_pantry_item(call, item_id)
+        fields: dict[str, Any] = {k: v for k, v in (("name", name), ("amount", amount)) if v is not None}
+        if expires or clear_expires:
+            fields["expires"] = None if clear_expires else _day(expires)
+        item = _run(nutrition.update_pantry_item, item_id, nutrition.PantryItemPatch(**fields), user=call.user, db=call.db)
+        call.record("update_pantry_item", f'Changed {before["name"]} in the pantry', {"action": "restore_pantry_item", "args": {"item": before}})
+        return item
+
+
+@mcp.tool(annotations=DELETE)
+def delete_pantry_item(item_id: str) -> str:
+    """Pantry: remove an item (used up or thrown away). Can be undone from the dashboard."""
+    with _Call() as call:
+        before = _find_pantry_item(call, item_id)
+        _run(nutrition.delete_pantry_item, item_id, user=call.user, db=call.db)
+        call.record("delete_pantry_item", f'Removed {before["name"]} from the pantry', {"action": "restore_pantry_item", "args": {"item": before}})
+        return "Deleted"
 
 
 # ---- Gym ----

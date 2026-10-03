@@ -46,3 +46,25 @@
 .food-basis { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .food-basis .food-group-title { margin: 0; }
 .food-basis .segmented button { font-size: 13px; padding: 5px 10px; }
+
+/* Pantry (PantryDialog.tsx) */
+.nutrition-head-actions { display: flex; gap: 6px; }
+.pantry-intro { margin: 0 0 10px; }
+.pantry-form { display: grid; grid-template-columns: 1fr 9em; gap: 8px; align-items: end; }
+.pantry-form input { width: 100%; min-width: 0; height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font: inherit; font-size: 14px; }
+.pantry-expires { display: flex; flex-direction: column; gap: 2px; }
+.pantry-form-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.pantry-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; }
+.pantry-list li { display: flex; align-items: center; gap: 6px; padding: 6px 0; }
+.pantry-list li + li { border-top: 1px solid var(--border); }
+.pantry-list li.editing .pantry-name { color: var(--accent); }
+.pantry-item { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  border: 0; background: none; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.pantry-name { font-size: 14px; font-weight: 550; overflow-wrap: anywhere; }
+.pantry-expiry { color: var(--muted); }
+.pantry-expiry.soon { color: #c98a00; font-weight: 550; }
+.pantry-expiry.expired { color: var(--danger); font-weight: 550; }
+@media (max-width: 640px) {
+  .pantry-form { grid-template-columns: 1fr; }
+}

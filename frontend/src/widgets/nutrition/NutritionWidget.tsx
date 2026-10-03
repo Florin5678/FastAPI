@@ -4,12 +4,14 @@ import type { WidgetProps } from '../types'
 import { AddFoodDialog } from './AddFoodDialog'
 import { EditFoodDialog } from './EditFoodDialog'
 import { FoodLog, NutrientBars } from './NutritionParts'
+import { PantryDialog } from './PantryDialog'
 import './nutrition.css'
 
 export type NutritionData = NutritionDayData
 
 export function NutritionWidget({ data, reload, actions }: WidgetProps<NutritionData>) {
   const [adding, setAdding] = useState(false)
+  const [pantryOpen, setPantryOpen] = useState(false)
   const [removing, setRemoving] = useState<number | null>(null)
   const [editing, setEditing] = useState<FoodEntry | null>(null)
 
@@ -27,7 +29,10 @@ export function NutritionWidget({ data, reload, actions }: WidgetProps<Nutrition
     <div className="nutrition-widget">
       <div className="nutrition-head">
         <button className="link" onClick={() => actions.goTo('nutrition')}>Today · history →</button>
-        <button className="button primary small-button" onClick={() => setAdding(true)}>+ Add food</button>
+        <span className="nutrition-head-actions">
+          <button className="button ghost small-button" onClick={() => setPantryOpen(true)}>🥫 Pantry</button>
+          <button className="button primary small-button" onClick={() => setAdding(true)}>+ Add food</button>
+        </span>
       </div>
 
       <NutrientBars nutrients={data.nutrients} />
@@ -37,6 +42,7 @@ export function NutritionWidget({ data, reload, actions }: WidgetProps<Nutrition
         ? <p className="muted small">Nothing logged yet today.</p>
         : <FoodLog entries={data.entries} removing={removing} onRemove={remove} onEdit={setEditing} />}
 
+      {pantryOpen && <PantryDialog onClose={() => setPantryOpen(false)} />}
       {editing && (
         <EditFoodDialog entry={editing} onSaved={() => { setEditing(null); reload() }} onClose={() => setEditing(null)} />
       )}
