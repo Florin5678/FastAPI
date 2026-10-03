@@ -123,7 +123,8 @@ def sync_gmail(
 ):
     """Store new Gmail messages. Called by "Sync now" (which then summarizes itself, to
     show the count) and every 10 minutes by cron-job.org with X-API-Key, in which case
-    the new emails are summarized in the background."""
+    the new emails are summarized in the background and the morning brief is written
+    when it's due."""
     access_token = _get_access_token(db, user)
 
     list_data = _gmail_get("/messages", access_token, {"maxResults": max_results})
@@ -156,6 +157,9 @@ def sync_gmail(
         saved += 1
 
     db.commit()
-    if saved and x_api_key:
-        background.add_task(_summarize_new, user.id)
+    if x_api_key:
+        if saved:
+            background.add_task(_summarize_new, user.id)
+        from app.widgets.assistant_chat import maybe_morning_brief  # (here: avoids an import cycle)
+        background.add_task(maybe_morning_brief, user.id)
     return {"synced": saved, "checked": len(message_ids)}

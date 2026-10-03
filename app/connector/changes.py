@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models import ConnectorChange, User
-from app.widgets import budget, gym, notes, nutrition
+from app.widgets import budget, gym, notes, nutrition, weight
 
 
 def record(db: Session, user: User, client_id: Optional[str], tool: str, summary: str, undo: Optional[dict]) -> ConnectorChange:
@@ -80,6 +80,8 @@ UNDO_ACTIONS: dict[str, Any] = {
     "readd_food": lambda db, user, a: _readd_food(db, user, a["entry"]),
     "delete_pantry_item": lambda db, user, a: nutrition.delete_pantry_item(a["id"], user=user, db=db),
     "restore_pantry_item": lambda db, user, a: _restore_pantry_item(db, user, a["item"]),
+    "set_weight": lambda db, user, a: weight.log_weight(db, user, date.fromisoformat(a["day"]), a["kg"]),
+    "delete_weight": lambda db, user, a: weight.delete_weight(db, user, a["day"]),
     "undo_pantry_items": lambda db, user, a: _undo_pantry_items(db, user, a["added"], a["before"]),
     "restore_food": lambda db, user, a: nutrition.update_entry(a["id"], nutrition.EntryPatch(
         day=date.fromisoformat(a["entry"]["day"]), name=a["entry"]["name"], grams=a["entry"].get("grams"),

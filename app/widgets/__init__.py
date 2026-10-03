@@ -17,6 +17,7 @@ from app.widgets import (  # noqa: F401
     google_calendar,
     animal,
     gym,
+    weight,
     budget,
     assistant,
 )

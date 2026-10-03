@@ -20,7 +20,7 @@ from app.core.database import SessionLocal
 from app.core.timeutil import DASHBOARD_TZ
 from app.mail.routes import _email_dict
 from app.models import BudgetEntry, Email, NutritionEntry, User, Workout
-from app.widgets import REGISTRY, assistant, budget, google_calendar, gym, news, notes, nutrition, weather
+from app.widgets import REGISTRY, assistant, budget, google_calendar, gym, news, notes, nutrition, weather, weight
 from app.widgets.registry import WidgetContext, widget_row
 
 TIMEZONE = DASHBOARD_TZ  # the user's local time for "today"
@@ -43,7 +43,9 @@ PLAN_GUIDE = (
     "of today's goals across those meals (more at main meals than snacks) and stay within what's left of the "
     "limits (sugar, saturated fat). Build the meals from the pantry first, using items with the fewest days_left "
     "first; keep things to buy to a minimum. Lean towards the nutrients in last_7_days.often_short, go easy on "
-    "often_over_limit, and avoid repeating recent_foods. Respect the user's diet and preferences. For each meal "
+    "often_over_limit, and avoid repeating recent_foods. If `weight` shows a goal and the trend isn't moving "
+    "towards it, adjust portions (e.g. more calories when a weight-gain goal stalls). Respect the user's diet and "
+    "preferences. For each meal "
     "give: a name, the ingredients with rough amounts (mark the pantry items), approximate kcal / protein / carbs "
     "/ fat / fiber, and a one-line method. Finish with how the plan covers today's remaining goals and a short "
     "shopping list (if anything is needed). Offer to log a meal once they've eaten it (log_food) and to update "
@@ -464,7 +466,14 @@ def log_saved_food(food: str, grams: Optional[float] = None, day: Optional[str] 
 def plan_meals() -> dict:
     with _Call() as call:
         _run(widget_row, call.db, call.user, nutrition.WIDGET_ID)
-        return {**nutrition.meal_plan_context(call.db, call.user, datetime.now(_zone())), "how_to_plan": PLAN_GUIDE}
+        context = nutrition.meal_plan_context(call.db, call.user, datetime.now(_zone()))
+        try:  # the Weight widget is optional
+            data = REGISTRY["weight"].fetch(call.db, call.user, REGISTRY["weight"].settings_for(
+                widget_row(call.db, call.user, weight.WIDGET_ID)), _ctx())
+            context["weight"] = {k: data[k] for k in ("latest", "change_week", "change_month", "goal_kg", "to_goal")}
+        except HTTPException:
+            context["weight"] = None
+        return {**context, "how_to_plan": PLAN_GUIDE}
 
 
 # ---- Pantry (food at home; not part of the briefing) ----
@@ -524,6 +533,36 @@ def delete_pantry_item(item_id: str) -> str:
         before = _find_pantry_item(call, item_id)
         _run(nutrition.delete_pantry_item, item_id, user=call.user, db=call.db)
         call.record("delete_pantry_item", f'Removed {before["name"]} from the pantry', {"action": "restore_pantry_item", "args": {"item": before}})
+        return "Deleted"
+
+
+# ---- Weight ----
+
+@mcp.tool(annotations=READ)
+def get_weight() -> dict:
+    """Weight: the latest body weight, the change vs about a week and a month earlier (with the day it's
+    measured from), the goal weight (if set) and the entries of the last 3 months (oldest first)."""
+    with _Call() as call:
+        return _widget(call, "weight")
+
+
+@mcp.tool(annotations=WRITE)
+def log_weight(kg: float, day: Optional[str] = None) -> dict:
+    """Weight: log the user's body weight in kg for a day (default today); replaces that day's value."""
+    with _Call() as call:
+        entry, previous = _run(weight.log_weight, call.db, call.user, _day(day), kg)
+        undo = ({"action": "set_weight", "args": previous} if previous
+                else {"action": "delete_weight", "args": {"day": entry["day"]}})
+        call.record("log_weight", f'Logged weight {entry["kg"]} kg on {entry["day"]}', undo)
+        return entry
+
+
+@mcp.tool(annotations=DELETE)
+def delete_weight(day: str) -> str:
+    """Weight: remove the weight logged on `day` (like 2026-10-03). Can be undone."""
+    with _Call() as call:
+        entry = _run(weight.delete_weight, call.db, call.user, _day(day).isoformat())
+        call.record("delete_weight", f'Removed weight {entry["kg"]} kg from {entry["day"]}', {"action": "set_weight", "args": entry})
         return "Deleted"
 
 

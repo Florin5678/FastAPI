@@ -24,6 +24,7 @@ from app.widgets.journal import router as journal_router
 from app.widgets.notes import router as notes_router
 from app.widgets.nutrition import router as nutrition_router
 from app.widgets.routes import router as widget_router
+from app.widgets.weight import router as weight_router
 
 ROOT = Path(__file__).resolve().parent.parent
 logger = logging.getLogger(__name__)
@@ -86,6 +87,7 @@ app.include_router(nutrition_router)  # Nutrition widget: food log, history, foo
 app.include_router(notes_router)  # Reminders widget
 app.include_router(journal_router)  # Journal widget: entries, prompts, locked history
 app.include_router(gym_router)  # Gym widget: log / delete workouts
+app.include_router(weight_router)  # Weight widget: log / delete weights
 app.include_router(assistant_router)  # Assistant widget: prompt & briefing settings
 app.include_router(assistant_chat_router)  # Assistant widget: AI chat (Claude API, monthly budget)
 app.include_router(budget_router)  # Budget widget: entries, monthly report, CSV import/export

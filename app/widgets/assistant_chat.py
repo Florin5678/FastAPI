@@ -29,7 +29,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.connector.tools import INSTRUCTIONS, TIMEZONE, _ctx, mcp
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
 from app.core.security import get_current_user
 from app.mail.summarize import get_client
 from app.models import ConnectorChange, User
@@ -182,21 +182,17 @@ def chat_status(user: User = Depends(get_current_user), db: Session = Depends(ge
     }
 
 
-@router.post("/chat")
-async def chat(body: ChatIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def converse(db: Session, user: User, messages: list[dict]) -> dict:
+    """Run one Claude turn with the dashboard as context and the connector's tools (repeating
+    while Claude calls tools), within the monthly budget. Used by the chat and the morning brief."""
     client = get_client()
     if client is None:
         raise HTTPException(status_code=503, detail="The AI chat needs a Claude API key: add ANTHROPIC_API_KEY on Render")
-    if _row(db, user) is None:
-        raise HTTPException(status_code=404, detail="Add the Assistant widget to your dashboard first")
     settings = load_settings(db, user)
     model = settings.model if settings.model in MODELS else DEFAULT_MODEL
-    if body.messages[-1].role != "user":
-        raise HTTPException(status_code=422, detail="The last message must be from you")
-
     system = _system(db, user)
     tools = _tools()
-    messages: list[dict] = [{"role": m.role, "content": m.content} for m in body.messages[-MAX_HISTORY:]]
+    messages = list(messages)
     while messages and messages[0]["role"] != "user":
         messages.pop(0)  # the API needs the conversation to start with the user
     started = datetime.utcnow()
@@ -213,7 +209,7 @@ async def chat(body: ChatIn, user: User = Depends(get_current_user), db: Session
                 model=model, max_tokens=MAX_REPLY_TOKENS, system=system, tools=tools, messages=messages,
             ))
         except Exception as e:  # anthropic.APIError and network errors
-            logger.warning("Assistant chat: Claude API call failed", exc_info=True)
+            logger.warning("Assistant: Claude API call failed", exc_info=True)
             raise HTTPException(status_code=502, detail=f"Claude didn't answer: {getattr(e, 'message', None) or type(e).__name__}") from e
         _add_usage(db, user, model, response.usage)
         reply = "".join(block.text for block in response.content if block.type == "text")
@@ -230,16 +226,80 @@ async def chat(body: ChatIn, user: User = Depends(get_current_user), db: Session
         messages.append({"role": "user", "content": results})
     else:
         reply = reply or "I needed too many steps for that one. Could you ask something more specific?"
+    return {"reply": reply.strip() or "(no answer)", "actions": actions, "started": started, "model": model,
+            "budget": settings.monthly_budget}
 
+
+@router.post("/chat")
+async def chat(body: ChatIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if _row(db, user) is None:
+        raise HTTPException(status_code=404, detail="Add the Assistant widget to your dashboard first")
+    if body.messages[-1].role != "user":
+        raise HTTPException(status_code=422, detail="The last message must be from you")
+    result = await converse(db, user, [{"role": m.role, "content": m.content} for m in body.messages[-MAX_HISTORY:]])
     changes = (
         db.query(ConnectorChange)
-        .filter(ConnectorChange.user_id == user.id, ConnectorChange.client_id == CLIENT_ID, ConnectorChange.created_at >= started)
+        .filter(ConnectorChange.user_id == user.id, ConnectorChange.client_id == CLIENT_ID,
+                ConnectorChange.created_at >= result["started"])
         .order_by(ConnectorChange.id)
         .all()
     )
     return {
-        "reply": reply.strip() or "(no answer)",
-        "actions": actions,
+        "reply": result["reply"],
+        "actions": result["actions"],
         "changes": [{"id": c.id, "summary": c.summary} for c in changes],
-        "usage": _usage_out(db, user, model, settings.monthly_budget),
+        "usage": _usage_out(db, user, result["model"], result["budget"]),
     }
+
+
+# ---- Morning brief ----
+# Written once a day after the time set in the Assistant settings, by the same Claude as the
+# chat (so it follows the answer sections and rules, and can use tools such as plan_meals).
+# The scheduled Gmail sync (cron-job.org, every 10 min) triggers it; "Generate now" on the
+# tile makes one on demand. Kept in the widget's row: config["morning_brief"].
+
+def _save_brief(db: Session, user: User, brief: dict) -> None:
+    row = _row(db, user)
+    row.config = {**(row.config or {}), "morning_brief": brief}
+    db.commit()
+
+
+async def write_morning_brief(db: Session, user: User) -> dict:
+    today = datetime.now(ZoneInfo(TIMEZONE)).date().isoformat()
+    _save_brief(db, user, {"day": today, "status": "writing", "text": None, "created_at": None})
+    try:
+        result = await converse(db, user, [{"role": "user", "content": "Brief me."}])
+        brief = {"day": today, "status": "ready", "text": result["reply"], "created_at": datetime.utcnow().isoformat() + "Z"}
+    except HTTPException as e:
+        brief = {"day": today, "status": "failed", "text": str(e.detail), "created_at": datetime.utcnow().isoformat() + "Z"}
+    _save_brief(db, user, brief)
+    return brief
+
+
+async def maybe_morning_brief(user_id: int) -> None:
+    """Write today's brief if it's switched on, past its time and not written yet (background task)."""
+    db = SessionLocal()
+    try:
+        user = db.get(User, user_id)
+        row = _row(db, user) if user else None
+        if row is None or get_client() is None:
+            return
+        settings = load_settings(db, user)
+        now = datetime.now(ZoneInfo(TIMEZONE))
+        if not settings.morning_brief or now.strftime("%H:%M") < settings.morning_brief_time:
+            return
+        if ((row.config or {}).get("morning_brief") or {}).get("day") == now.date().isoformat():
+            return  # already written (or being written) today
+        await write_morning_brief(db, user)
+    except Exception:
+        logger.warning("Morning brief failed", exc_info=True)
+    finally:
+        db.close()
+
+
+@router.post("/morning-brief")
+async def generate_morning_brief(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Write today's brief now (replacing it), from the tile's "Generate now"."""
+    if _row(db, user) is None:
+        raise HTTPException(status_code=404, detail="Add the Assistant widget to your dashboard first")
+    return await write_morning_brief(db, user)

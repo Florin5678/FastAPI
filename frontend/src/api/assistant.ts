@@ -20,6 +20,17 @@ export type AssistantSettings = {
   filters: BriefingFilters
   model: string // AI chat model id
   monthly_budget: number // AI chat spend limit per month, USD (0 = off)
+  morning_brief: boolean // Claude writes a brief each day after morning_brief_time
+  morning_brief_time: string // HH:MM, local time
+}
+
+export type MorningBrief = {
+  enabled: boolean
+  time: string
+  day?: string // YYYY-MM-DD it was written for
+  status?: 'writing' | 'ready' | 'failed'
+  text?: string | null
+  created_at?: string | null
 }
 
 export type ChatMessage = { role: 'user' | 'assistant'; content: string }
@@ -41,6 +52,7 @@ export const assistantApi = {
     request<{ prompt: string }>('/widgets/assistant/preview', { method: 'POST', ...json(settings) }),
   chatStatus: () => request<{ enabled: boolean; usage: ChatUsage; models: ChatModel[] }>('/widgets/assistant/chat/status'),
   chat: (messages: ChatMessage[]) => request<ChatReply>('/widgets/assistant/chat', { method: 'POST', ...json({ messages }) }),
+  generateMorningBrief: () => request<MorningBrief>('/widgets/assistant/morning-brief', { method: 'POST' }),
   save: (settings: AssistantSettings) =>
     request<{ settings: AssistantSettings }>('/widgets/assistant/settings', { method: 'PUT', ...json(settings) }),
 }

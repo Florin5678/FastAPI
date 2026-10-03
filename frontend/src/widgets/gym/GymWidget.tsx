@@ -77,6 +77,7 @@ export function GymWidget({ data, reload, actions }: WidgetProps<GymData>) {
 
   return (
     <div className="gym-widget">
+      <button className="link gym-open" onClick={() => actions.goTo('gym')}>Monthly report →</button>
       <div className="gym-head">
         <span className="muted small">
           This week{data.streak_weeks > 0 && <> · 🔥 {data.streak_weeks} week{data.streak_weeks === 1 ? '' : 's'} on target</>}
@@ -149,7 +150,6 @@ export function GymWidget({ data, reload, actions }: WidgetProps<GymData>) {
         </ul>
       )}
 
-      <button className="link gym-open" onClick={() => actions.goTo('gym')}>Open monthly report →</button>
     </div>
   )
 }

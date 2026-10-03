@@ -92,6 +92,9 @@ class AssistantSettings(BaseModel):
     # AI chat (paid Claude API, see assistant_chat.py)
     model: str = Field("claude-haiku-4-5", max_length=60)
     monthly_budget: float = Field(5.0, ge=0, le=200)  # USD; 0 = chat off
+    # Morning brief (assistant_chat.py): written by Claude each day after this local time
+    morning_brief: bool = False
+    morning_brief_time: str = Field("07:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
 def default_settings() -> AssistantSettings:
@@ -223,7 +226,9 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     prefs = load_settings(db, user)
     sections = briefing_sections(db, user, ctx, prefs)
     return {"sections": sections, "prompt": compose_prompt(prefs, sections),
-            "claude_prompt": prefs.claude_prompt.strip() or DEFAULT_CLAUDE_PROMPT}
+            "claude_prompt": prefs.claude_prompt.strip() or DEFAULT_CLAUDE_PROMPT,
+            "morning_brief": {"enabled": prefs.morning_brief, "time": prefs.morning_brief_time,
+                              **((_row(db, user).config or {}).get("morning_brief") or {})}}
 
 
 register(WidgetDefinition(

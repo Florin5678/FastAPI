@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { localDate } from '../../api'
 import type { WidgetProps } from '../types'
 import { AssistantSettingsDialog } from './AssistantSettingsDialog'
 import { ChatPanel } from './ChatPanel'
+import { MorningBriefDialog } from './MorningBriefDialog'
 import { fillWhen, type AssistantData } from './prompt'
 import './assistant.css'
 
@@ -11,6 +13,7 @@ export function AssistantWidget({ data, actions, reload }: WidgetProps<Assistant
   const [note, setNote] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
+  const [briefOpen, setBriefOpen] = useState(false)
 
   const copy = async (text: string): Promise<boolean> => {
     try {
@@ -40,9 +43,15 @@ export function AssistantWidget({ data, actions, reload }: WidgetProps<Assistant
         <button className="button ghost assistant-settings-button" onClick={() => setSettingsOpen(true)} aria-label="Assistant settings" title="Settings: what the prompt says and includes">⚙</button>
       </div>
       <button className="button ghost assistant-chat-button" onClick={() => setChatOpen(true)}>💬 Chat with your dashboard</button>
+      {(data.morning_brief.enabled || data.morning_brief.text) && (
+        <button className="button ghost assistant-chat-button" onClick={() => setBriefOpen(true)}>
+          ☀️ Morning brief{data.morning_brief.day === localDate() && data.morning_brief.status === 'ready' ? '' : ` (from ${data.morning_brief.time})`}
+        </button>
+      )}
       {note
         ? <p className="small assistant-note">{note}</p>
         : <button className="assistant-link small" onClick={() => actions.goTo('connector')}>Claude connector: let Claude read &amp; edit your dashboard →</button>}
+      {briefOpen && <MorningBriefDialog brief={data.morning_brief} onChanged={reload} onClose={() => setBriefOpen(false)} />}
       {chatOpen && <ChatPanel onClose={(changed) => { setChatOpen(false); if (changed) actions.refresh() }} />}
       {settingsOpen && (
         <AssistantSettingsDialog onSaved={() => { setNote('Settings saved.'); reload() }} onClose={() => setSettingsOpen(false)} />

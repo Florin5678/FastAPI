@@ -95,3 +95,10 @@
   .chat-turn { max-width: 95%; }
   .chat-log { max-height: 60vh; }
 }
+.assistant-morning { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.assistant-morning-toggle { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.assistant-morning-toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
+.assistant-morning label:last-child { display: flex; align-items: center; gap: 6px; }
+.assistant-morning input[type="time"] { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; }
+.morning-brief-text { white-space: pre-wrap; line-height: 1.55; font-size: 14px; max-height: 60vh; overflow-y: auto; }
+.morning-brief-cost { margin-right: auto; }

@@ -215,6 +215,25 @@ export function AssistantSettingsDialog({ onSaved, onClose }: Props) {
             {usage && <p className="muted small">This month so far: ${usage.cost.toFixed(2)} ({usage.requests} requests). The chat stops at the budget; 0 turns it off.</p>}
           </section>
 
+          <section>
+            <h3>Morning brief</h3>
+            <p className="muted small">
+              Claude writes your brief each day after this time and leaves it on the Assistant tile (☀️ Morning brief).
+              It uses the AI chat above (model and monthly budget; about $0.01 a day).
+            </p>
+            <div className="assistant-morning">
+              <label className="assistant-morning-toggle">
+                <input type="checkbox" checked={settings.morning_brief} onChange={(e) => update({ morning_brief: e.target.checked })} />
+                Write a morning brief every day
+              </label>
+              <label>
+                <span className="muted small">After</span>
+                <input type="time" value={settings.morning_brief_time} disabled={!settings.morning_brief}
+                  onChange={(e) => update({ morning_brief_time: e.target.value || '07:00' })} aria-label="Morning brief time" />
+              </label>
+            </div>
+          </section>
+
           <section className="assistant-preview">
             <div className="assistant-settings-head">
               <h3>Preview</h3>
