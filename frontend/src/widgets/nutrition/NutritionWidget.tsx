@@ -28,7 +28,7 @@ export function NutritionWidget({ data, reload, actions }: WidgetProps<Nutrition
   return (
     <div className="nutrition-widget">
       <div className="nutrition-head">
-        <button className="link" onClick={() => actions.goTo('nutrition')}>Today · history →</button>
+        <button className="link" onClick={() => actions.goTo('nutrition')}>History →</button>
         <span className="nutrition-head-actions">
           <button className="button ghost small-button" onClick={() => setPantryOpen(true)}>🥫 Pantry</button>
           <button className="button primary small-button" onClick={() => setAdding(true)}>+ Add food</button>

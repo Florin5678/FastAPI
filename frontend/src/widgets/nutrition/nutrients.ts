@@ -21,7 +21,7 @@ export function barState(n: NutrientRow): { percent: number; tone: 'progress' | 
 }
 
 // The nutrient fields in dialogs, in display order (two per row: calories/protein,
-// carbs/sugar, fat/saturated fat, fiber)
+// carbs/sugar, fat/saturated fat, fiber/salt)
 export const FIELDS: { key: NutrientKey; label: string; unit: string }[] = [
   { key: 'calories', label: 'Calories', unit: 'kcal' },
   { key: 'protein', label: 'Protein', unit: 'g' },
@@ -30,19 +30,20 @@ export const FIELDS: { key: NutrientKey; label: string; unit: string }[] = [
   { key: 'fat', label: 'Fat', unit: 'g' },
   { key: 'sat_fat', label: 'Saturated fat', unit: 'g' },
   { key: 'fiber', label: 'Fiber', unit: 'g' },
+  { key: 'salt', label: 'Salt', unit: 'g' },
 ]
 
 // Values per 100 g -> values for `grams` (one decimal)
 export function scale(per100: NutrientValues, grams: number): NutrientValues {
   return Object.fromEntries(
-    FIELDS.map(({ key }) => [key, Math.round((per100[key] * grams) / 10) / 10]),
+    FIELDS.map(({ key }) => [key, Math.round(((per100[key] ?? 0) * grams) / 10) / 10]),
   ) as NutrientValues
 }
 
 // Values for `grams` -> values per 100 g (two decimals)
 export function per100g(values: NutrientValues, grams: number): NutrientValues {
   return Object.fromEntries(
-    FIELDS.map(({ key }) => [key, Math.round((values[key] * 10000) / grams) / 100]),
+    FIELDS.map(({ key }) => [key, Math.round(((values[key] ?? 0) * 10000) / grams) / 100]),
   ) as NutrientValues
 }
 
@@ -52,5 +53,5 @@ export function toValues(form: Record<string, string>): NutrientValues {
 }
 
 export function summary(values: NutrientValues): string {
-  return FIELDS.map(({ key, label, unit }) => `${label} ${fmt(values[key])} ${unit}`).join(' · ')
+  return FIELDS.map(({ key, label, unit }) => `${label} ${fmt(values[key] ?? 0)} ${unit}`).join(' · ')
 }

@@ -49,7 +49,7 @@ OFF_USER_AGENT = "PersonalDashboard/1.0 (https://github.com/Florin5678/FastAPI; 
 # Open Food Facts nutriment keys (per 100 g) for our nutrients
 OFF_KEYS = {
     "calories": "energy-kcal_100g", "protein": "proteins_100g", "carbs": "carbohydrates_100g", "fat": "fat_100g",
-    "fiber": "fiber_100g", "sugar": "sugars_100g", "sat_fat": "saturated-fat_100g",
+    "fiber": "fiber_100g", "sugar": "sugars_100g", "sat_fat": "saturated-fat_100g", "salt": "salt_100g",
 }
 SEARCH_CACHE_SECONDS = 24 * 3600
 
@@ -62,6 +62,7 @@ NUTRIENTS = [
     ("fiber", "Fiber", "g", "goal", ("291",)),
     ("sugar", "Sugar", "g", "limit", ("269", "269.3")),
     ("sat_fat", "Sat. fat", "g", "limit", ("606",)),
+    ("salt", "Salt", "g", "limit", ("307",)),  # USDA lists sodium (mg): see SODIUM_TO_SALT
 ]
 
 # Starting goals, from the user's profile: male, 27 y, 173 cm, 66 kg, 3-4 workouts/week,
@@ -73,7 +74,7 @@ NUTRIENTS = [
 # (Also hardcoded in the a7c3e1f92b10 migration, which moved the old JSON log.)
 DEFAULT_GOALS = {
     "calories": 2900, "protein": 130, "carbs": 400, "fat": 85,
-    "fiber": 38, "sugar": 70, "sat_fat": 30,
+    "fiber": 38, "sugar": 70, "sat_fat": 30, "salt": 6,  # salt: the Danish limit for men
 }
 GOAL_MAX = {"calories": 10000}
 MAX_SAVED_FOODS = 300
@@ -196,6 +197,7 @@ class Nutrients(BaseModel):
     fiber: float = Field(0, ge=0, le=2000)
     sugar: float = Field(0, ge=0, le=2000)
     sat_fat: float = Field(0, ge=0, le=2000)
+    salt: float = Field(0, ge=0, le=500)
 
 
 class EntryIn(BaseModel):
@@ -741,12 +743,15 @@ def shopping_to_pantry(item_id: str, user: User = Depends(get_current_user), db:
     return {k: v for k, v in move_items(db, user, "shopping", [item_id]).items() if k != "undo"}
 
 
+SODIUM_TO_SALT = 2.5 / 1000  # mg sodium -> g salt
+
+
 def _per_100g(food: dict) -> dict:
     by_number = {str(n.get("nutrientNumber")): n.get("value") for n in food.get("foodNutrients", [])}
     values = {}
     for key, _label, _unit, _kind, numbers in NUTRIENTS:
-        value = next((by_number[n] for n in numbers if by_number.get(n) is not None), 0)
-        values[key] = round(float(value), 2)
+        value = float(next((by_number[n] for n in numbers if by_number.get(n) is not None), 0))
+        values[key] = round(value * SODIUM_TO_SALT if key == "salt" else value, 2)
     return values
 
 
@@ -784,6 +789,8 @@ def _off_value(nutriments: dict, key: str) -> Optional[float]:
     value = nutriments.get(OFF_KEYS[key])
     if value is None and key == "calories" and nutriments.get("energy-kj_100g") is not None:
         value = float(nutriments["energy-kj_100g"]) / 4.184  # some labels only give kJ
+    if value is None and key == "salt" and nutriments.get("sodium_100g") is not None:
+        value = float(nutriments["sodium_100g"]) * 2.5  # some labels only give sodium (g)
     try:
         return round(float(value), 2) if value is not None else None
     except (TypeError, ValueError):

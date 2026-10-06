@@ -101,6 +101,7 @@ class NutritionEntry(Base):
     fiber = Column(Float, nullable=False, default=0)
     sugar = Column(Float, nullable=False, default=0)
     sat_fat = Column(Float, nullable=False, default=0)
+    salt = Column(Float, nullable=False, default=0)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 

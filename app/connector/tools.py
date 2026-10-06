@@ -446,14 +446,15 @@ def search_foods(query: str) -> dict:
 
 @mcp.tool(annotations=WRITE)
 def log_food(name: str, calories: float, protein: float = 0, carbs: float = 0, fat: float = 0, fiber: float = 0,
-             sugar: float = 0, sat_fat: float = 0, grams: Optional[float] = None, day: Optional[str] = None,
+             sugar: float = 0, sat_fat: float = 0, salt: float = 0, grams: Optional[float] = None, day: Optional[str] = None,
              values_per_100g: bool = False) -> dict:
     """Nutrition: add a NEW entry to the food log (any meal, snack or drink, not only saved foods) for a day
     (default today). Nutrients are for the amount eaten; or, with
     values_per_100g=true (e.g. straight from search_foods), per 100 g and scaled to `grams` (then required).
     If the user didn't say the amount, estimate a typical portion and tell them."""
     with _Call() as call:
-        values = {"calories": calories, "protein": protein, "carbs": carbs, "fat": fat, "fiber": fiber, "sugar": sugar, "sat_fat": sat_fat}
+        values = {"calories": calories, "protein": protein, "carbs": carbs, "fat": fat, "fiber": fiber, "sugar": sugar,
+                  "sat_fat": sat_fat, "salt": salt}
         if values_per_100g:
             if not grams:
                 raise ToolError("Give `grams` (the amount eaten) when the values are per 100 g")
@@ -479,14 +480,14 @@ def delete_food(entry_id: int) -> str:
         return "Deleted"
 
 
-NUTRIENT_KEYS = ("calories", "protein", "carbs", "fat", "fiber", "sugar", "sat_fat")
+NUTRIENT_KEYS = ("calories", "protein", "carbs", "fat", "fiber", "sugar", "sat_fat", "salt")
 
 
 @mcp.tool(annotations=EDIT)
 def update_food(entry_id: int, grams: Optional[float] = None, name: Optional[str] = None, day: Optional[str] = None,
                 calories: Optional[float] = None, protein: Optional[float] = None, carbs: Optional[float] = None,
                 fat: Optional[float] = None, fiber: Optional[float] = None, sugar: Optional[float] = None,
-                sat_fat: Optional[float] = None) -> dict:
+                sat_fat: Optional[float] = None, salt: Optional[float] = None) -> dict:
     """Nutrition: edit an existing food log entry (ids from get_nutrition for today, get_nutrition_history for earlier days). Change only `grams` to rescale its values to the new
     amount; or give new nutrient values for the amount eaten (others stay as they are); or rename it, or
     move it to another `day` (like 2026-09-28)."""
@@ -495,7 +496,8 @@ def update_food(entry_id: int, grams: Optional[float] = None, name: Optional[str
         if row is None:
             raise ToolError("Entry not found")
         before = nutrition._entry_dict(row)
-        given = {k: v for k, v in zip(NUTRIENT_KEYS, (calories, protein, carbs, fat, fiber, sugar, sat_fat), strict=True) if v is not None}
+        given = {k: v for k, v in zip(NUTRIENT_KEYS, (calories, protein, carbs, fat, fiber, sugar, sat_fat, salt), strict=True)
+                 if v is not None}
         patch: dict[str, Any] = {}
         if given:
             patch["nutrients"] = nutrition.Nutrients(**{**before["nutrients"], **given})
