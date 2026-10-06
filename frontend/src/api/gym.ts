@@ -15,7 +15,8 @@ export type GymMonth = {
   minutes: number
   days_trained: number
   first_month: string | null
-  kinds: string[] // routine order: fixes each type's colour
+  kinds: string[] // the routine list (types to pick from)
+  colors: Record<string, number> // workout type -> colour slot 1-12, the same in every month and chart
 }
 
 export type GymStatsLevel = 'week' | 'month' | 'year'
@@ -28,7 +29,7 @@ export type GymStats = {
   end: string
   totals: { kind: string; sessions: number; minutes: number }[]
   active_days: number
-  kinds: string[] // routine order: fixes each type's colour
+  colors: Record<string, number> // workout type -> colour slot 1-12
 }
 
 export const gymApi = {

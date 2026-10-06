@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { gymApi, localDate, type Workout } from '../../api'
 import type { WidgetProps } from '../types'
 import { EditWorkoutDialog } from './EditWorkoutDialog'
+import { KindPicker } from './KindPicker'
 import './gym.css'
 
 export type GymData = {
@@ -86,11 +87,7 @@ export function GymWidget({ data, reload, actions }: WidgetProps<GymData>) {
 
       {logging && (
         <form className="gym-log" onSubmit={log}>
-          <div className="chips compact" role="radiogroup" aria-label="Workout type">
-            {data.kinds.map((k) => (
-              <button key={k} type="button" role="radio" aria-checked={kind === k} className={kind === k ? 'chip active' : 'chip'} onClick={() => setKind(k)}>{k}</button>
-            ))}
-          </div>
+          <KindPicker kinds={data.kinds} value={kind} onChange={setKind} />
           <div className="gym-log-row">
             <label className="gym-minutes">
               <input type="number" min={1} max={600} value={minutes} onChange={(e) => setMinutes(e.target.value)} aria-label="Minutes" />
@@ -100,7 +97,7 @@ export function GymWidget({ data, reload, actions }: WidgetProps<GymData>) {
           </div>
           <div className="dialog-actions">
             <button type="button" className="button ghost small-button" onClick={() => setLogging(false)}>Cancel</button>
-            <button type="submit" className="button primary small-button" disabled={busy || !(Number(minutes) > 0)}>Save</button>
+            <button type="submit" className="button primary small-button" disabled={busy || !(Number(minutes) > 0) || !kind.trim()}>Save</button>
           </div>
         </form>
       )}

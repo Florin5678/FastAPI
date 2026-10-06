@@ -59,7 +59,7 @@ export function GymChart() {
   const total = data ? data.totals.reduce((s, t) => s + t.minutes, 0) : 0
   const sessions = data ? data.totals.reduce((s, t) => s + t.sessions, 0) : 0
   // Colour slot by the type's place in the routine list (unknown types after it)
-  const slot = (kind: string) => seriesSlot(kind, data?.kinds ?? [])
+  const slot = (kind: string) => seriesSlot(kind, data?.colors ?? {})
 
   return (
     <div className="card gym-chart">

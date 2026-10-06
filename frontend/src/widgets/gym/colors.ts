@@ -1,10 +1,13 @@
-// Each workout type keeps one colour everywhere (the Gym page's calendar and its Totals chart):
-// its place in the routine list picks one of the 8 validated palette slots (.gym-series-N in
-// gym.css). Types not in the list get a slot from their name, so it stays the same too.
-export function seriesSlot(kind: string, kinds: string[]): number {
-  const i = kinds.indexOf(kind)
-  if (i >= 0) return (i % 8) + 1
+// Each workout type keeps one colour everywhere (the Gym page's calendar and its Totals chart,
+// in every month): the server gives each type a slot (gym.type_colors: the routines in list
+// order, then other types in the order first logged), which picks one of the 12 validated
+// palette colours (.gym-series-N in gym.css). A type the server didn't list yet gets a slot
+// from its name, so it's stable too.
+export const COLOR_SLOTS = 12
+
+export function seriesSlot(kind: string, colors: Record<string, number>): number {
+  if (colors[kind]) return colors[kind]
   let hash = 0
   for (const ch of kind) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
-  return (hash % 8) + 1
+  return (hash % COLOR_SLOTS) + 1
 }

@@ -66,7 +66,8 @@
 }
 
 /* Gym chart (GymChart.tsx): categorical palette validated with the dataviz validator
-   (light vs #ffffff, dark vs #181a22); one slot per workout type in routine order */
+   (light vs #ffffff, dark vs #181a22; 12 colours, ordered so neighbours stay distinct); one slot per
+   workout type (gym.type_colors) */
 .gym-series-1 { --series: #2a78d6; }
 .gym-series-2 { --series: #eb6834; }
 .gym-series-3 { --series: #1baf7a; }
@@ -75,6 +76,10 @@
 .gym-series-6 { --series: #008300; }
 .gym-series-7 { --series: #4a3aa7; }
 .gym-series-8 { --series: #e34948; }
+.gym-series-9 { --series: #0097b2; }
+.gym-series-10 { --series: #8f9f00; }
+.gym-series-11 { --series: #b02e8c; }
+.gym-series-12 { --series: #9c5b2e; }
 @media (prefers-color-scheme: dark) {
   .gym-series-1 { --series: #3987e5; }
   .gym-series-2 { --series: #d95926; }
@@ -84,6 +89,10 @@
   .gym-series-6 { --series: #008300; }
   .gym-series-7 { --series: #9085e9; }
   .gym-series-8 { --series: #e66767; }
+  .gym-series-9 { --series: #13a3c0; }
+  .gym-series-10 { --series: #869700; }
+  .gym-series-11 { --series: #c955a8; }
+  .gym-series-12 { --series: #b8763f; }
 }
 .gym-chart { display: flex; flex-direction: column; gap: 12px; }
 .gym-chart-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
@@ -113,3 +122,4 @@
   .gym-chart-body.pie { flex-direction: column; }
   .gym-chart-controls { justify-content: center; }
 }
+.gym-other { width: 100%; }

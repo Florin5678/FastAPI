@@ -75,12 +75,28 @@ def test_workout_can_be_edited(client):
     w = client.post("/widgets/gym/workouts", json={"day": date.today().isoformat(), "kind": "Abs", "minutes": 30}).json()
     edited = client.patch(f"/widgets/gym/workouts/{w['id']}", json={"kind": "Legs", "minutes": 45, "note": "heavy"}).json()
     assert (edited["kind"], edited["minutes"], edited["note"]) == ("Legs", 45, "heavy")
-    assert client.patch(f"/widgets/gym/workouts/{w['id']}", json={"kind": "Nope"}).status_code == 422
 
 
-def test_month_report_has_the_routine_order_for_colours(client):
-    report = client.get("/widgets/gym/month", params={"month": date.today().strftime("%Y-%m")}).json()
-    assert report["kinds"] == gym.load_routines()
+def test_any_workout_type_and_list_types_keep_their_spelling(client):
+    today = date.today().isoformat()
+    other = client.post("/widgets/gym/workouts", json={"day": today, "kind": "  Calisthenics ", "minutes": 40}).json()
+    listed = client.post("/widgets/gym/workouts", json={"day": today, "kind": "shoulders", "minutes": 40}).json()
+    assert other["kind"] == "Calisthenics" and listed["kind"] == "Shoulders"
+    assert client.post("/widgets/gym/workouts", json={"day": today, "kind": "   ", "minutes": 40}).status_code == 422
+
+
+def test_each_type_keeps_one_colour_in_every_month_and_chart(client):
+    routines = gym.load_routines()
+    assert "Shoulders" in routines
+    for day, kind in [("2026-08-03", "Calisthenics"), ("2026-09-07", "Yoga"), ("2026-10-05", "Abs")]:
+        client.post("/widgets/gym/workouts", json={"day": day, "kind": kind, "minutes": 30})
+    months = [client.get("/widgets/gym/month", params={"month": m}).json()["colors"] for m in ("2026-08", "2026-09", "2026-10")]
+    stats = client.get("/widgets/gym/stats", params={"level": "year", "anchor": "2026-10-05"}).json()["colors"]
+    assert months[0] == months[1] == months[2] == stats
+    colours = months[0]
+    assert [colours[k] for k in routines] == list(range(1, len(routines) + 1))  # the list in order
+    assert colours["Calisthenics"] == len(routines) + 1 and colours["Yoga"] == len(routines) + 2  # then first logged
+    assert len(set(colours.values())) == min(len(colours), gym.COLOR_SLOTS)
 
 
 # ---- Weight ----

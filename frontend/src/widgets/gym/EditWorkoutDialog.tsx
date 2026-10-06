@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { gymApi, localDate, type Workout } from '../../api'
 import { Dialog } from '../../components/Dialog'
+import { KindPicker } from './KindPicker'
 
 // Change a logged workout: its type, minutes, day or note (the Gym tile and the monthly report)
 export function EditWorkoutDialog({ workout, kinds, onSaved, onClose }: {
@@ -30,15 +31,10 @@ export function EditWorkoutDialog({ workout, kinds, onSaved, onClose }: {
     }
   }
 
-  const options = kinds.includes(kind) ? kinds : [kind, ...kinds]
   return (
     <Dialog title="Edit workout" onClose={onClose}>
       <form className="settings-form edit-workout" onSubmit={save}>
-        <div className="chips compact" role="radiogroup" aria-label="Workout type">
-          {options.map((k) => (
-            <button key={k} type="button" role="radio" aria-checked={kind === k} className={kind === k ? 'chip active' : 'chip'} onClick={() => setKind(k)}>{k}</button>
-          ))}
-        </div>
+        <KindPicker kinds={kinds} value={kind} onChange={setKind} />
         <label className="field">
           <span>Minutes</span>
           <input type="number" min={1} max={600} value={minutes} onChange={(e) => setMinutes(e.target.value)} />
@@ -54,7 +50,7 @@ export function EditWorkoutDialog({ workout, kinds, onSaved, onClose }: {
         {error && <p className="error-text small">{error}</p>}
         <div className="dialog-actions">
           <button type="button" className="button ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" className="button primary" disabled={busy || !(Number(minutes) > 0)}>{busy ? 'Saving…' : 'Save'}</button>
+          <button type="submit" className="button primary" disabled={busy || !(Number(minutes) > 0) || !kind.trim()}>{busy ? 'Saving…' : 'Save'}</button>
         </div>
       </form>
     </Dialog>

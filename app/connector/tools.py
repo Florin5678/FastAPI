@@ -903,7 +903,8 @@ def delete_weight(day: str) -> str:
 
 @mcp.tool(annotations=WRITE)
 def log_workout(kind: str, minutes: int, day: Optional[str] = None, note: Optional[str] = None) -> dict:
-    """Gym: add a NEW workout entry. `kind` must be one of the workout types from get_workouts; `day` default today."""
+    """Gym: add a NEW workout entry. `kind`: one of the workout types from get_workouts, or any other name for
+    something else (e.g. "Calisthenics"); `day` default today."""
     with _Call() as call:
         workout = _run(gym.log_workout, gym.WorkoutIn(day=_day(day), kind=kind, minutes=minutes, note=note), user=call.user, db=call.db)
         call.record("log_workout", f'Logged {workout["kind"]} workout, {workout["minutes"]} min on {workout["day"]}',

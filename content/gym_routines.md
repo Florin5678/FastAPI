@@ -14,3 +14,4 @@ freely; workouts you already logged keep their name.
 - Back
 - HEMA
 - Run
+- Shoulders

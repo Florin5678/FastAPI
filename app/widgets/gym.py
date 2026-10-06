@@ -34,6 +34,35 @@ def load_routines() -> list[str]:
     return _routines_cache["routines"]
 
 
+COLOR_SLOTS = 12  # chart palette size (.gym-series-1..12 in gym.css)
+
+
+def clean_kind(kind: str) -> str:
+    """A workout type: one of the routines (matched in any case, spelled as in the list) or any
+    other name ("Other" in the log form, e.g. Calisthenics)."""
+    name = " ".join(kind.split())
+    if not name:
+        raise HTTPException(status_code=422, detail="Give the workout a type")
+    if len(name) > 32:
+        raise HTTPException(status_code=422, detail="Workout types can be at most 32 characters")
+    return next((r for r in load_routines() if r.lower() == name.lower()), name)
+
+
+def type_colors(db: Session, user: User) -> dict[str, int]:
+    """Workout type -> colour slot (1-12), the same in every month and chart: the routines in list
+    order, then other types in the order they were first logged."""
+    order = list(load_routines())
+    firsts = (
+        db.query(Workout.kind, func.min(Workout.id))
+        .filter(Workout.user_id == user.id)
+        .group_by(Workout.kind)
+        .order_by(func.min(Workout.id))
+        .all()
+    )
+    order += [kind for kind, _ in firsts if kind not in order]
+    return {kind: i % COLOR_SLOTS + 1 for i, kind in enumerate(order)}
+
+
 def _week_start(day: date) -> date:
     return day - timedelta(days=day.weekday())
 
@@ -159,7 +188,7 @@ router = APIRouter(prefix=f"/widgets/{WIDGET_ID}", tags=["widgets"])
 
 class WorkoutIn(BaseModel):
     day: date  # the user's local date
-    kind: str
+    kind: str = Field(min_length=1, max_length=60)  # a routine or any other type (see clean_kind)
     minutes: int = Field(ge=1, le=600)
     note: Optional[str] = Field(None, max_length=300)
 
@@ -167,12 +196,10 @@ class WorkoutIn(BaseModel):
 @router.post("/workouts")
 def log_workout(body: WorkoutIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     widget_row(db, user, WIDGET_ID)
-    routines = load_routines()
-    if body.kind not in routines:
-        raise HTTPException(status_code=422, detail=f"Type must be one of: {', '.join(routines)}")
     if body.day > datetime.now(timezone.utc).date() + timedelta(days=1):
         raise HTTPException(status_code=422, detail="Workouts can't be logged for a future day")
-    workout = Workout(user_id=user.id, day=body.day, kind=body.kind, minutes=body.minutes, note=(body.note or "").strip() or None)
+    workout = Workout(user_id=user.id, day=body.day, kind=clean_kind(body.kind), minutes=body.minutes,
+                      note=(body.note or "").strip() or None)
     db.add(workout)
     db.commit()
     db.refresh(workout)
@@ -192,10 +219,7 @@ def update_workout(workout_id: int, body: WorkoutPatch, user: User = Depends(get
     if workout is None:
         raise HTTPException(status_code=404, detail="Workout not found")
     if body.kind is not None:
-        routines = load_routines()
-        if body.kind not in routines:
-            raise HTTPException(status_code=422, detail=f"Type must be one of: {', '.join(routines)}")
-        workout.kind = body.kind
+        workout.kind = clean_kind(body.kind)
     if body.day is not None:
         if body.day > datetime.now(timezone.utc).date() + timedelta(days=1):
             raise HTTPException(status_code=422, detail="Workouts can't be logged for a future day")
@@ -255,7 +279,7 @@ def stats(
         "end": (end - timedelta(days=1)).isoformat(),
         "totals": sorted(totals.values(), key=lambda t: -t["minutes"]),  # only types done in the period
         "active_days": len({w.day for w in workouts}),
-        "kinds": load_routines(),  # fixed order, so each type keeps its chart colour
+        "colors": type_colors(db, user),  # type -> colour slot, the same everywhere
     }
 
 
@@ -319,5 +343,6 @@ def month_report(
         "minutes": sum(w.minutes for w in workouts),
         "days_trained": len(days),
         "first_month": first.strftime("%Y-%m") if first else None,
-        "kinds": load_routines(),  # fixed order, so each type keeps its colour
+        "kinds": load_routines(),  # the types to pick from when editing
+        "colors": type_colors(db, user),  # type -> colour slot, the same everywhere
     }
