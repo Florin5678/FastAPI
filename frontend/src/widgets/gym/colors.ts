@@ -1,6 +1,6 @@
 // Each workout type keeps one colour everywhere (the Gym page's calendar and its Totals chart,
-// in every month): the server gives each type a slot (gym.type_colors: the routines in list
-// order, then other types in the order first logged), which picks one of the 12 validated
+// in every month): the server gives each type a slot (gym.type_colors: its place in the user's
+// list of workout types, shown and hidden alike), which picks one of the 12 validated
 // palette colours (.gym-series-N in gym.css). A type the server didn't list yet gets a slot
 // from its name, so it's stable too.
 export const COLOR_SLOTS = 12

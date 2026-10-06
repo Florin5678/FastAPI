@@ -346,7 +346,7 @@ def get_workouts(month: Optional[str] = None) -> dict:
         week = _widget(call, "gym")
         return {
             "this_week": {k: week[k] for k in ("week_start", "goal_active_days", "active_days", "goal_minutes", "workouts_done", "minutes_done", "streak_weeks")},
-            "workout_types": week["kinds"],
+            "workout_types": week["kinds"] + week["other_kinds"],
             "month": _run(gym.month_report, _month(month), user=call.user, db=call.db),
         }
 
@@ -904,7 +904,7 @@ def delete_weight(day: str) -> str:
 @mcp.tool(annotations=WRITE)
 def log_workout(kind: str, minutes: int, day: Optional[str] = None, note: Optional[str] = None) -> dict:
     """Gym: add a NEW workout entry. `kind`: one of the workout types from get_workouts, or any other name for
-    something else (e.g. "Calisthenics"); `day` default today."""
+    something else (e.g. "Calisthenics"; it's added to their list of types); `day` default today."""
     with _Call() as call:
         workout = _run(gym.log_workout, gym.WorkoutIn(day=_day(day), kind=kind, minutes=minutes, note=note), user=call.user, db=call.db)
         call.record("log_workout", f'Logged {workout["kind"]} workout, {workout["minutes"]} min on {workout["day"]}',

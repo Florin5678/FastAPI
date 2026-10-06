@@ -58,7 +58,7 @@ export function GymChart() {
   const atLatest = data ? data.end >= today : false
   const total = data ? data.totals.reduce((s, t) => s + t.minutes, 0) : 0
   const sessions = data ? data.totals.reduce((s, t) => s + t.sessions, 0) : 0
-  // Colour slot by the type's place in the routine list (unknown types after it)
+  // Colour slot by the type's place in the list of workout types (the same on the calendar)
   const slot = (kind: string) => seriesSlot(kind, data?.colors ?? {})
 
   return (

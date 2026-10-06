@@ -3,6 +3,7 @@ import { gymApi, localDate, type GymMonth, type Workout } from '../../api'
 import { seriesSlot } from './colors'
 import { EditWorkoutDialog } from './EditWorkoutDialog'
 import { GymChart } from './GymChart'
+import { WorkoutTypes } from './WorkoutTypes'
 import './gym.css'
 import { monthTitle, shiftMonth } from '../../lib/dates'
 import { duration } from '../../lib/format'
@@ -136,10 +137,15 @@ export function GymPage() {
             <h2>Totals by type</h2>
           </div>
           <GymChart />
+
+          <div className="section-head history-head">
+            <h2>Workout types</h2>
+          </div>
+          <WorkoutTypes types={data.kinds} shown={data.shown_types} onSaved={() => setVersion((v) => v + 1)} />
         </>
       )}
       {editing && data && (
-        <EditWorkoutDialog workout={editing} kinds={data.kinds} onSaved={() => setVersion((v) => v + 1)} onClose={() => setEditing(null)} />
+        <EditWorkoutDialog workout={editing} kinds={data.kinds.slice(0, data.shown_types)} others={data.kinds.slice(data.shown_types)} onSaved={() => setVersion((v) => v + 1)} onClose={() => setEditing(null)} />
       )}
     </section>
   )

@@ -123,3 +123,13 @@
   .gym-chart-controls { justify-content: center; }
 }
 .gym-other { width: 100%; }
+.gym-types { display: flex; flex-direction: column; gap: 10px; }
+.gym-types p { margin: 0; }
+.gym-types-body { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.gym-types textarea { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font: inherit; font-size: 14px; line-height: 1.6; resize: vertical; }
+.gym-types-preview { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 2px; font-size: 14px; line-height: 1.6; }
+.gym-types-preview li { display: list-item; }
+.gym-types-preview .gym-swatch { display: inline-block; vertical-align: -1px; margin-right: 6px; }
+.gym-types-preview .hidden-type { color: var(--muted); }
+@media (max-width: 640px) { .gym-types-body { grid-template-columns: 1fr; } }

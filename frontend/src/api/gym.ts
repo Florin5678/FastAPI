@@ -15,7 +15,8 @@ export type GymMonth = {
   minutes: number
   days_trained: number
   first_month: string | null
-  kinds: string[] // the routine list (types to pick from)
+  kinds: string[] // the whole list of workout types, in order (= colour order)
+  shown_types: number // the first ones are the log form's buttons; the rest come up under "Other…"
   colors: Record<string, number> // workout type -> colour slot 1-12, the same in every month and chart
 }
 
@@ -40,4 +41,5 @@ export const gymApi = {
   update: (id: number, changes: { day?: string; kind?: string; minutes?: number; note?: string }) =>
     request<Workout>(`/widgets/gym/workouts/${id}`, { method: 'PATCH', ...json(changes) }),
   remove: (id: number) => request<unknown>(`/widgets/gym/workouts/${id}`, { method: 'DELETE' }),
+  saveTypes: (types: string[]) => request<{ types: string[] }>('/widgets/gym/types', { method: 'PUT', ...json({ types }) }),
 }

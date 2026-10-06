@@ -2,7 +2,6 @@
 # (number of workouts and minutes), which days you trained, the last 8 weeks and a
 # streak of weeks that met the workout goal. Weeks start on Monday (local dates).
 from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -17,49 +16,69 @@ from app.models import User, Workout
 from app.widgets.registry import REGISTRY, ConfigField, WidgetContext, WidgetDefinition, register, widget_row
 
 WIDGET_ID = "gym"
-# Edit the workout types in content/gym_routines.md (repo root)
-ROUTINES_FILE = Path(__file__).resolve().parents[2] / "content" / "gym_routines.md"
-_routines_cache: dict = {"mtime": None, "routines": []}
+# The starting list of workout types, used once to set up a user's list (config["types"]); after
+# that the list lives only in the dashboard: edited on the Gym page, extended by "Other…"
+DEFAULT_TYPES = ["Abs", "Legs", "Chest", "Biceps", "Triceps", "Back", "HEMA", "Run", "Shoulders"]
 RECENT_DAYS = 14  # workouts listed in the Assistant's briefing
 WEEKS_SHOWN = 8
-
-
-def load_routines() -> list[str]:
-    """Workout types ("- Name" lines) in file order, re-read when the file changes."""
-    mtime = ROUTINES_FILE.stat().st_mtime
-    if _routines_cache["mtime"] != mtime:
-        names = [line[2:].strip() for line in ROUTINES_FILE.read_text(encoding="utf-8").splitlines()
-                 if line.startswith("- ") and line[2:].strip()]
-        _routines_cache.update(mtime=mtime, routines=names)
-    return _routines_cache["routines"]
-
-
 COLOR_SLOTS = 12  # chart palette size (.gym-series-1..12 in gym.css)
+SHOWN_TYPES = 9  # the first types in the list are the log form's buttons; the rest come up under "Other…"
+MAX_TYPES = 100
 
 
-def clean_kind(kind: str) -> str:
-    """A workout type: one of the routines (matched in any case, spelled as in the list) or any
-    other name ("Other" in the log form, e.g. Calisthenics)."""
+def workout_types(db: Session, user: User) -> list[str]:
+    """The user's workout types, in order, kept in the widget's row (config["types"]). The first
+    time it's DEFAULT_TYPES plus any types already logged, in the order first logged."""
+    row = widget_row(db, user, WIDGET_ID)
+    saved = (row.config or {}).get("types")
+    if saved:
+        return list(saved)
+    types = list(DEFAULT_TYPES)
+    firsts = (db.query(Workout.kind, func.min(Workout.id)).filter(Workout.user_id == user.id)
+              .group_by(Workout.kind).order_by(func.min(Workout.id)).all())
+    types += [kind for kind, _ in firsts if kind.lower() not in {t.lower() for t in types}]
+    row.config = {**(row.config or {}), "types": types}
+    db.commit()
+    return types
+
+
+def save_workout_types(db: Session, user: User, types: list[str]) -> list[str]:
+    cleaned: list[str] = []
+    for name in types:
+        name = " ".join(name.split())[:32]
+        if name and name.lower() not in {t.lower() for t in cleaned}:
+            cleaned.append(name)
+    if not cleaned:
+        raise HTTPException(status_code=422, detail="Keep at least one workout type")
+    row = widget_row(db, user, WIDGET_ID)
+    row.config = {**(row.config or {}), "types": cleaned[:MAX_TYPES]}
+    db.commit()
+    return cleaned[:MAX_TYPES]
+
+
+def clean_kind(db: Session, user: User, kind: str) -> str:
+    """A workout type from the list (matched in any case, spelled as in the list), or a new one
+    ("Other…", e.g. Calisthenics), which is added to the end of the list."""
     name = " ".join(kind.split())
     if not name:
         raise HTTPException(status_code=422, detail="Give the workout a type")
     if len(name) > 32:
         raise HTTPException(status_code=422, detail="Workout types can be at most 32 characters")
-    return next((r for r in load_routines() if r.lower() == name.lower()), name)
+    types = workout_types(db, user)
+    existing = next((t for t in types if t.lower() == name.lower()), None)
+    if existing:
+        return existing
+    save_workout_types(db, user, [*types, name])
+    return name
 
 
 def type_colors(db: Session, user: User) -> dict[str, int]:
-    """Workout type -> colour slot (1-12), the same in every month and chart: the routines in list
-    order, then other types in the order they were first logged."""
-    order = list(load_routines())
-    firsts = (
-        db.query(Workout.kind, func.min(Workout.id))
-        .filter(Workout.user_id == user.id)
-        .group_by(Workout.kind)
-        .order_by(func.min(Workout.id))
-        .all()
-    )
-    order += [kind for kind, _ in firsts if kind not in order]
+    """Workout type -> colour slot (1-12) by its place in the list (shown and hidden types alike),
+    so a type has the same colour in every month and chart. Logged types no longer in the list
+    (renamed or removed) come after."""
+    order = workout_types(db, user)
+    logged = [k for (k,) in db.query(Workout.kind).filter(Workout.user_id == user.id).distinct().order_by(Workout.kind)]
+    order += [k for k in logged if k not in order]
     return {kind: i % COLOR_SLOTS + 1 for i, kind in enumerate(order)}
 
 
@@ -121,7 +140,8 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
         ],
         "streak_weeks": streak,
         "workouts": [_workout_dict(w) for w in workouts],
-        "kinds": load_routines(),
+        "kinds": (types := workout_types(db, user))[:SHOWN_TYPES],  # the log form's buttons
+        "other_kinds": types[SHOWN_TYPES:],  # suggested under "Other…"
         # For the Assistant's briefing
         "recent": [
             _workout_dict(w) for w in db.query(Workout)
@@ -186,6 +206,17 @@ register(WidgetDefinition(
 router = APIRouter(prefix=f"/widgets/{WIDGET_ID}", tags=["widgets"])
 
 
+class TypesIn(BaseModel):
+    types: list[str] = Field(min_length=1, max_length=MAX_TYPES)
+
+
+@router.put("/types")
+def put_workout_types(body: TypesIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Replace the list of workout types (order = colours; the first SHOWN_TYPES are the log
+    form's buttons). Workouts already logged keep their type name."""
+    return {"types": save_workout_types(db, user, body.types)}
+
+
 class WorkoutIn(BaseModel):
     day: date  # the user's local date
     kind: str = Field(min_length=1, max_length=60)  # a routine or any other type (see clean_kind)
@@ -198,7 +229,7 @@ def log_workout(body: WorkoutIn, user: User = Depends(get_current_user), db: Ses
     widget_row(db, user, WIDGET_ID)
     if body.day > datetime.now(timezone.utc).date() + timedelta(days=1):
         raise HTTPException(status_code=422, detail="Workouts can't be logged for a future day")
-    workout = Workout(user_id=user.id, day=body.day, kind=clean_kind(body.kind), minutes=body.minutes,
+    workout = Workout(user_id=user.id, day=body.day, kind=clean_kind(db, user, body.kind), minutes=body.minutes,
                       note=(body.note or "").strip() or None)
     db.add(workout)
     db.commit()
@@ -219,7 +250,7 @@ def update_workout(workout_id: int, body: WorkoutPatch, user: User = Depends(get
     if workout is None:
         raise HTTPException(status_code=404, detail="Workout not found")
     if body.kind is not None:
-        workout.kind = clean_kind(body.kind)
+        workout.kind = clean_kind(db, user, body.kind)
     if body.day is not None:
         if body.day > datetime.now(timezone.utc).date() + timedelta(days=1):
             raise HTTPException(status_code=422, detail="Workouts can't be logged for a future day")
@@ -343,6 +374,7 @@ def month_report(
         "minutes": sum(w.minutes for w in workouts),
         "days_trained": len(days),
         "first_month": first.strftime("%Y-%m") if first else None,
-        "kinds": load_routines(),  # the types to pick from when editing
+        "kinds": workout_types(db, user),  # the whole list, in order (first SHOWN_TYPES are the buttons)
+        "shown_types": SHOWN_TYPES,
         "colors": type_colors(db, user),  # type -> colour slot, the same everywhere
     }

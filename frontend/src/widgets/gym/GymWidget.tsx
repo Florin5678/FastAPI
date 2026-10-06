@@ -16,7 +16,8 @@ export type GymData = {
   days: { day: string; trained: boolean }[]
   streak_weeks: number
   workouts: Workout[]
-  kinds: string[]
+  kinds: string[] // the log form's buttons (the first types in the list)
+  other_kinds: string[] // the rest of the list, suggested under "Other…"
 }
 
 const WEEKDAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
@@ -87,7 +88,7 @@ export function GymWidget({ data, reload, actions }: WidgetProps<GymData>) {
 
       {logging && (
         <form className="gym-log" onSubmit={log}>
-          <KindPicker kinds={data.kinds} value={kind} onChange={setKind} />
+          <KindPicker kinds={data.kinds} others={data.other_kinds} value={kind} onChange={setKind} />
           <div className="gym-log-row">
             <label className="gym-minutes">
               <input type="number" min={1} max={600} value={minutes} onChange={(e) => setMinutes(e.target.value)} aria-label="Minutes" />
@@ -132,7 +133,7 @@ export function GymWidget({ data, reload, actions }: WidgetProps<GymData>) {
           ))}
         </ul>
       )}
-      {editing && <EditWorkoutDialog workout={editing} kinds={data.kinds} onSaved={reload} onClose={() => setEditing(null)} />}
+      {editing && <EditWorkoutDialog workout={editing} kinds={data.kinds} others={data.other_kinds} onSaved={reload} onClose={() => setEditing(null)} />}
     </div>
   )
 }

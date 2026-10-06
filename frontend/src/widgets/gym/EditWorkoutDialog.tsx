@@ -4,9 +4,10 @@ import { Dialog } from '../../components/Dialog'
 import { KindPicker } from './KindPicker'
 
 // Change a logged workout: its type, minutes, day or note (the Gym tile and the monthly report)
-export function EditWorkoutDialog({ workout, kinds, onSaved, onClose }: {
+export function EditWorkoutDialog({ workout, kinds, others, onSaved, onClose }: {
   workout: Workout
-  kinds: string[]
+  kinds: string[] // the shown types (buttons)
+  others: string[] // the hidden ones, suggested under "Other…"
   onSaved: () => void
   onClose: () => void
 }) {
@@ -34,7 +35,7 @@ export function EditWorkoutDialog({ workout, kinds, onSaved, onClose }: {
   return (
     <Dialog title="Edit workout" onClose={onClose}>
       <form className="settings-form edit-workout" onSubmit={save}>
-        <KindPicker kinds={kinds} value={kind} onChange={setKind} />
+        <KindPicker kinds={kinds} others={others} value={kind} onChange={setKind} />
         <label className="field">
           <span>Minutes</span>
           <input type="number" min={1} max={600} value={minutes} onChange={(e) => setMinutes(e.target.value)} />

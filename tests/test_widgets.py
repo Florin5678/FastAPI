@@ -86,8 +86,8 @@ def test_any_workout_type_and_list_types_keep_their_spelling(client):
 
 
 def test_each_type_keeps_one_colour_in_every_month_and_chart(client):
-    routines = gym.load_routines()
-    assert "Shoulders" in routines
+    routines = gym.DEFAULT_TYPES
+    assert routines[-1] == "Shoulders"
     for day, kind in [("2026-08-03", "Calisthenics"), ("2026-09-07", "Yoga"), ("2026-10-05", "Abs")]:
         client.post("/widgets/gym/workouts", json={"day": day, "kind": kind, "minutes": 30})
     months = [client.get("/widgets/gym/month", params={"month": m}).json()["colors"] for m in ("2026-08", "2026-09", "2026-10")]
@@ -95,8 +95,26 @@ def test_each_type_keeps_one_colour_in_every_month_and_chart(client):
     assert months[0] == months[1] == months[2] == stats
     colours = months[0]
     assert [colours[k] for k in routines] == list(range(1, len(routines) + 1))  # the list in order
-    assert colours["Calisthenics"] == len(routines) + 1 and colours["Yoga"] == len(routines) + 2  # then first logged
+    assert colours["Calisthenics"] == len(routines) + 1 and colours["Yoga"] == len(routines) + 2  # then added via "Other"
     assert len(set(colours.values())) == min(len(colours), gym.COLOR_SLOTS)
+
+
+def test_other_types_join_the_list_and_only_the_first_nine_are_buttons(client):
+    today = date.today().isoformat()
+    for kind in ("Calisthenics", "calisthenics", "Yoga"):
+        client.post("/widgets/gym/workouts", json={"day": today, "kind": kind, "minutes": 30})
+    data = client.get("/widgets/gym/data", params={"tz": "Europe/Copenhagen"}).json()["data"]
+    assert data["kinds"] == gym.DEFAULT_TYPES[:gym.SHOWN_TYPES]
+    assert data["other_kinds"] == gym.DEFAULT_TYPES[gym.SHOWN_TYPES:] + ["Calisthenics", "Yoga"]
+
+
+def test_editing_the_list_changes_buttons_and_colours(client):
+    client.post("/widgets/gym/workouts", json={"day": "2026-10-05", "kind": "Abs", "minutes": 30})
+    saved = client.put("/widgets/gym/types", json={"types": ["Yoga", " abs ", "Abs", "Legs", ""]}).json()["types"]
+    assert saved == ["Yoga", "abs", "Legs"]  # trimmed, duplicates (any case) and blanks dropped
+    month = client.get("/widgets/gym/month", params={"month": "2026-10"}).json()
+    assert month["kinds"] == saved and month["colors"]["Yoga"] == 1 and month["colors"]["Legs"] == 3
+    assert client.put("/widgets/gym/types", json={"types": [" "]}).status_code == 422
 
 
 # ---- Weight ----
