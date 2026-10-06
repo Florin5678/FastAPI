@@ -90,11 +90,6 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
             {"day": (this_week + timedelta(days=i)).isoformat(), "trained": (this_week + timedelta(days=i)) in done_days}
             for i in range(7)
         ],
-        "weeks": [
-            {"week_start": (first_week + timedelta(weeks=i)).isoformat(),
-             "active_days": week_counts.get(first_week + timedelta(weeks=i), 0)}
-            for i in range(WEEKS_SHOWN)
-        ],
         "streak_weeks": streak,
         "workouts": [_workout_dict(w) for w in workouts],
         "kinds": load_routines(),
@@ -324,4 +319,5 @@ def month_report(
         "minutes": sum(w.minutes for w in workouts),
         "days_trained": len(days),
         "first_month": first.strftime("%Y-%m") if first else None,
+        "kinds": load_routines(),  # fixed order, so each type keeps its colour
     }

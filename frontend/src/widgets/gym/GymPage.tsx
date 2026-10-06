@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { gymApi, localDate, type GymMonth } from '../../api'
+import { seriesSlot } from './colors'
 import { GymChart } from './GymChart'
 import './gym.css'
 import { monthTitle, shiftMonth } from '../../lib/dates'
@@ -72,7 +73,7 @@ export function GymPage() {
                 >
                   <span className="gym-month-num">{i + 1}</span>
                   {workouts.map((w) => (
-                    <span key={w.id} className="gym-month-entry">{w.kind}<span className="gym-month-time"> · {duration(w.minutes)}</span></span>
+                    <span key={w.id} className={`gym-month-entry gym-series-${seriesSlot(w.kind, data.kinds)}`}>{w.kind}<span className="gym-month-time"> · {duration(w.minutes)}</span></span>
                   ))}
                 </button>
               )

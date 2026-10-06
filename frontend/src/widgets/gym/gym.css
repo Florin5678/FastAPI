@@ -23,12 +23,6 @@
 .gym-day.trained { background: #22a559; color: #fff; }
 .gym-day.today { box-shadow: inset 0 0 0 2px var(--accent); }
 .gym-day.future { opacity: 0.5; }
-.gym-weeks { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; height: 64px; align-items: end; }
-.gym-week-col { display: flex; flex-direction: column; align-items: center; gap: 3px; height: 100%; }
-.gym-week-bar { flex: 1; width: 100%; max-width: 22px; display: flex; align-items: flex-end; border-radius: 4px; background: var(--surface-2); }
-.gym-week-fill { width: 100%; min-height: 2px; border-radius: 4px 4px 0 0; background: #f2b705; }
-.gym-week-fill.met { background: #22a559; }
-.gym-week-label { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .gym-list { margin-top: 2px; }
 @media (prefers-color-scheme: dark) {
   .gym-goal-value.met { color: #5fd08e; }
@@ -53,8 +47,10 @@
 .gym-month-day.future { opacity: 0.5; }
 .gym-month-num { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .gym-month-entry {
-  font-size: 11px; line-height: 1.3; font-weight: 550; padding: 2px 5px; border-radius: 5px;
-  background: var(--surface); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; line-height: 1.3; font-weight: 550; padding: 2px 5px 2px 6px; border-radius: 5px;
+  background: color-mix(in srgb, var(--series, var(--accent)) 18%, var(--surface));
+  border-left: 3px solid var(--series, var(--accent));
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .gym-weekly { list-style: none; margin: 0; display: flex; flex-direction: column; gap: 14px; }
 .gym-weekly li { width: 100%; display: grid; grid-template-columns: 9em 1fr auto; align-items: center; gap: 4px 12px; font-size: 14px; }

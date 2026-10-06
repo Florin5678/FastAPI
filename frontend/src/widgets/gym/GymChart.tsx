@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { gymApi, localDate, type GymStats, type GymStatsLevel } from '../../api'
+import { seriesSlot } from './colors'
 import { duration } from '../../lib/format'
 
 // Minutes per workout type for a week, month or year, as a pie (each type's share) or
@@ -58,11 +59,7 @@ export function GymChart() {
   const total = data ? data.totals.reduce((s, t) => s + t.minutes, 0) : 0
   const sessions = data ? data.totals.reduce((s, t) => s + t.sessions, 0) : 0
   // Colour slot by the type's place in the routine list (unknown types after it)
-  const slot = (kind: string) => {
-    if (!data) return 1
-    const i = data.kinds.indexOf(kind)
-    return ((i >= 0 ? i : data.kinds.length + data.totals.findIndex((t) => t.kind === kind)) % 8) + 1
-  }
+  const slot = (kind: string) => seriesSlot(kind, data?.kinds ?? [])
 
   return (
     <div className="card gym-chart">

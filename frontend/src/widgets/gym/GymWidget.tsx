@@ -12,7 +12,6 @@ export type GymData = {
   workouts_done: number
   minutes_done: number
   days: { day: string; trained: boolean }[]
-  weeks: { week_start: string; active_days: number }[]
   streak_weeks: number
   workouts: Workout[]
   kinds: string[]
@@ -73,8 +72,6 @@ export function GymWidget({ data, reload, actions }: WidgetProps<GymData>) {
     }
   }
 
-  const maxWeek = Math.max(data.goal_active_days, ...data.weeks.map((w) => w.active_days))
-
   return (
     <div className="gym-widget">
       <button className="link gym-open" onClick={() => actions.goTo('gym')}>Monthly report →</button>
@@ -120,20 +117,6 @@ export function GymWidget({ data, reload, actions }: WidgetProps<GymData>) {
             {WEEKDAY_LETTERS[i]}
           </span>
         ))}
-      </div>
-
-      <div className="gym-weeks" aria-label="Active days per week, last 8 weeks">
-        {data.weeks.map((w, i) => {
-          const met = w.active_days >= data.goal_active_days
-          return (
-            <span key={w.week_start} className="gym-week-col" title={`Week of ${new Date(w.week_start + 'T12:00').toLocaleDateString([], { day: 'numeric', month: 'short' })}: ${w.active_days} active day${w.active_days === 1 ? '' : 's'}`}>
-              <span className="gym-week-bar">
-                <span className={met ? 'gym-week-fill met' : 'gym-week-fill'} style={{ height: `${(w.active_days / maxWeek) * 100}%` }} />
-              </span>
-              <span className="gym-week-label">{i === data.weeks.length - 1 ? 'now' : w.active_days}</span>
-            </span>
-          )
-        })}
       </div>
 
       {data.workouts.length > 0 && (

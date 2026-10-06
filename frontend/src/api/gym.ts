@@ -15,6 +15,7 @@ export type GymMonth = {
   minutes: number
   days_trained: number
   first_month: string | null
+  kinds: string[] // routine order: fixes each type's colour
 }
 
 export type GymStatsLevel = 'week' | 'month' | 'year'

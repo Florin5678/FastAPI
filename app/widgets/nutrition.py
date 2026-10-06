@@ -317,6 +317,39 @@ def history(
     return {"days": result, "first_logged_day": first.isoformat() if first else None}
 
 
+def history_detail(db: Session, user: User, end: date, days: int) -> dict:
+    """For each of `days` days ending on `end` (newest first): the goals, what was eaten, the
+    share of each goal reached and the foods logged (with ids, to edit them)."""
+    summary = history(end=end, days=days, user=user, db=db)
+    entries = (
+        db.query(NutritionEntry)
+        .filter(NutritionEntry.user_id == user.id, NutritionEntry.day >= end - timedelta(days=days - 1),
+                NutritionEntry.day <= end)
+        .order_by(NutritionEntry.created_at, NutritionEntry.id)
+        .all()
+    )
+    foods: dict[str, list[dict]] = {}
+    for e in entries:
+        foods.setdefault(e.day.isoformat(), []).append(
+            {"id": e.id, "name": e.name, "grams": e.grams, "calories": round(e.calories), "protein": round(e.protein, 1)})
+    return {
+        "days": [
+            {
+                "day": d["day"],
+                "logged": bool(d["entries"]),
+                "nutrients": [
+                    {"nutrient": n["label"], "unit": n["unit"], "kind": n["kind"], "goal": n["goal"], "eaten": n["actual"],
+                     "percent_of_goal": round(100 * n["actual"] / n["goal"]) if n["goal"] else None}
+                    for n in d["nutrients"]
+                ],
+                "foods": foods.get(d["day"], []),
+            }
+            for d in summary["days"]
+        ],
+        "first_logged_day": summary["first_logged_day"],
+    }
+
+
 @router.post("/entries")
 def add_entry(body: EntryIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     widget_row(db, user, WIDGET_ID)

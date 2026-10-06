@@ -247,19 +247,22 @@ def get_reminders() -> dict:
 
 
 @mcp.tool(annotations=READ)
-def get_nutrition(day: Optional[str] = None) -> dict:
-    """One day's food log with totals vs the user's goals (calories, protein, carbs, fat, fiber, sugar,
-    saturated fat). `day` like 2026-09-28; default today."""
+def get_nutrition() -> dict:
+    """Nutrition: TODAY only - the food logged today (with ids) and the totals vs the user's goals (calories,
+    protein, carbs, fat, fiber, sugar, saturated fat). Earlier days: get_nutrition_history."""
     with _Call() as call:
         _run(widget_row, call.db, call.user, nutrition.WIDGET_ID)
-        return nutrition.day_summary(call.db, call.user, _day(day))
+        return nutrition.day_summary(call.db, call.user, _today())
 
 
 @mcp.tool(annotations=READ)
 def get_nutrition_history(days: int = 14) -> dict:
-    """Daily nutrition totals for the last `days` days (1-90), newest first."""
+    """Nutrition history: the `days` days before today (default 14, at most 60), newest first. Per day: each
+    macronutrient's goal, what was eaten and the percent of the goal reached, plus the foods logged (id, name,
+    grams, kcal, protein; ids to edit them). Today: get_nutrition."""
     with _Call() as call:
-        return _run(nutrition.history, end=_today(), days=max(1, min(days, 90)), user=call.user, db=call.db)
+        _run(widget_row, call.db, call.user, nutrition.WIDGET_ID)
+        return nutrition.history_detail(call.db, call.user, _today() - timedelta(days=1), max(1, min(days, 60)))
 
 
 @mcp.tool(annotations=READ)
@@ -465,7 +468,7 @@ def log_food(name: str, calories: float, protein: float = 0, carbs: float = 0, f
 
 @mcp.tool(annotations=DELETE)
 def delete_food(entry_id: int) -> str:
-    """Nutrition: remove an entry from the food log (ids from get_nutrition; can be undone)."""
+    """Nutrition: remove an entry from the food log (ids from get_nutrition for today, get_nutrition_history for earlier days; can be undone)."""
     with _Call() as call:
         row = call.db.query(NutritionEntry).filter(NutritionEntry.id == entry_id, NutritionEntry.user_id == call.user.id).first()
         if row is None:
@@ -484,7 +487,7 @@ def update_food(entry_id: int, grams: Optional[float] = None, name: Optional[str
                 calories: Optional[float] = None, protein: Optional[float] = None, carbs: Optional[float] = None,
                 fat: Optional[float] = None, fiber: Optional[float] = None, sugar: Optional[float] = None,
                 sat_fat: Optional[float] = None) -> dict:
-    """Nutrition: edit an existing food log entry (ids from get_nutrition). Change only `grams` to rescale its values to the new
+    """Nutrition: edit an existing food log entry (ids from get_nutrition for today, get_nutrition_history for earlier days). Change only `grams` to rescale its values to the new
     amount; or give new nutrient values for the amount eaten (others stay as they are); or rename it, or
     move it to another `day` (like 2026-09-28)."""
     with _Call() as call:
