@@ -516,7 +516,8 @@ def update_food(entry_id: int, grams: Optional[float] = None, name: Optional[str
 @mcp.tool(annotations=READ)
 def list_saved_foods() -> dict:
     """The user's saved foods ("My foods"), most recently used first, with values per 100 g and the usual
-    amount in grams. Use log_saved_food to log one again, update_saved_food to correct one."""
+    amount in grams. Use log_saved_food to log one again, add_saved_food / update_saved_food / delete_saved_food
+    to change the list."""
     with _Call() as call:
         return _run(nutrition.list_saved_foods, user=call.user, db=call.db)
 
@@ -529,6 +530,23 @@ def _find_saved_food(call: _Call, food: str) -> dict:
         names = ", ".join(f["name"] for f in (match or foods)[:15])
         raise ToolError(f"{'Several' if match else 'No'} saved foods match '{food}'. Saved foods: {names or 'none yet'}")
     return match[0]
+
+
+@mcp.tool(annotations=WRITE)
+def add_saved_food(name: str, calories: float, protein: float = 0, carbs: float = 0, fat: float = 0, fiber: float = 0,
+                   sugar: float = 0, sat_fat: float = 0, salt: float = 0, grams: Optional[float] = None) -> dict:
+    """Nutrition: add a food to "My foods" (saved foods the user logs again and again), with its values PER 100 g
+    (e.g. from the label or search_foods) and optionally `grams`, the usual amount eaten. Doesn't log it: use
+    log_saved_food for that. If the name is already in My foods, use update_saved_food instead. Undoable."""
+    with _Call() as call:
+        foods = _run(nutrition.list_saved_foods, user=call.user, db=call.db)["foods"]
+        if any(f["name"].lower() == name.strip().lower() for f in foods):
+            raise ToolError(f"'{name}' is already in My foods: use update_saved_food to change it")
+        per_100g = dict(zip(NUTRIENT_KEYS, (calories, protein, carbs, fat, fiber, sugar, sat_fat, salt), strict=True))
+        food = _run(nutrition.save_food, call.db, call.user, name, per_100g, grams)
+        call.db.commit()
+        call.record("add_saved_food", f'Added {food["name"]} to My foods', {"action": "delete_saved_food", "args": {"id": food["id"]}})
+        return food
 
 
 @mcp.tool(annotations=EDIT)
