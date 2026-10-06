@@ -60,9 +60,15 @@ export type NutritionHistory = {
   first_logged_day: string | null
 }
 
-// Food at home (not part of the briefing; Claude uses it for meal suggestions)
-export type PantryItem = { id: string; name: string; amount: string; expires: string | null; added_at: string; updated_at: string }
+// Food at home and the shopping list (not part of the briefing; Claude uses them for meal plans)
+export type PantryItem = {
+  id: string; name: string; amount: string; expires: string | null
+  priority: boolean // ★ use first (close to expiring, opened cans...)
+  added_at: string; updated_at: string
+}
 export type PantryItemIn = { name: string; amount: string; expires: string | null }
+export type ShoppingItem = { id: string; name: string; amount: string; note: string; added_at: string; updated_at: string }
+export type ShoppingItemIn = { name: string; amount: string; note?: string }
 
 export const nutritionApi = {
   searchFoods: (q: string) => request<FoodResult[]>(`/widgets/nutrition/foods?q=${encodeURIComponent(q)}`),
@@ -75,9 +81,15 @@ export const nutritionApi = {
   deleteEntry: (id: number) => request<unknown>(`/widgets/nutrition/entries/${id}`, { method: 'DELETE' }),
   getDay: (day: string) => request<NutritionDayData>(`/widgets/nutrition/days/${day}`),
   history: (end: string, days: number) => request<NutritionHistory>(`/widgets/nutrition/history?end=${end}&days=${days}`),
-  pantry: () => request<{ items: PantryItem[] }>('/widgets/nutrition/pantry'),
+  pantry: () => request<{ items: PantryItem[]; shopping: ShoppingItem[] }>('/widgets/nutrition/pantry'),
   addPantryItem: (item: PantryItemIn) => request<PantryItem>('/widgets/nutrition/pantry', { method: 'POST', ...json(item) }),
-  updatePantryItem: (id: string, item: PantryItemIn) =>
+  updatePantryItem: (id: string, item: Partial<PantryItemIn & { priority: boolean }>) =>
     request<PantryItem>(`/widgets/nutrition/pantry/${id}`, { method: 'PATCH', ...json(item) }),
   deletePantryItem: (id: string) => request<unknown>(`/widgets/nutrition/pantry/${id}`, { method: 'DELETE' }),
+  pantryToShopping: (id: string) => request<unknown>(`/widgets/nutrition/pantry/${id}/to-shopping`, { method: 'POST' }),
+  addShoppingItem: (item: ShoppingItemIn) => request<ShoppingItem>('/widgets/nutrition/shopping', { method: 'POST', ...json(item) }),
+  updateShoppingItem: (id: string, item: Partial<ShoppingItemIn>) =>
+    request<ShoppingItem>(`/widgets/nutrition/shopping/${id}`, { method: 'PATCH', ...json(item) }),
+  deleteShoppingItem: (id: string) => request<unknown>(`/widgets/nutrition/shopping/${id}`, { method: 'DELETE' }),
+  shoppingToPantry: (id: string) => request<unknown>(`/widgets/nutrition/shopping/${id}/to-pantry`, { method: 'POST' }),
 }

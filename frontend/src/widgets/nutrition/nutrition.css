@@ -68,3 +68,8 @@
 @media (max-width: 640px) {
   .pantry-form { grid-template-columns: 1fr; }
 }
+.pantry-form.shopping { grid-template-columns: 1fr 9em; }
+.pantry-star { border: 0; background: none; padding: 0 2px; font-size: 19px; line-height: 1; cursor: pointer; color: var(--muted); }
+.pantry-star.on { color: #e3a500; }
+.pantry-star:hover { color: #e3a500; }
+.pantry-bought { color: #1a8a4a; font-weight: 700; }

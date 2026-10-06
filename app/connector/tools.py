@@ -33,23 +33,40 @@ DELETE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint
 
 MEAL_GUIDE = (
     "When the user asks for meal suggestions, a meal plan or what to eat or cook (also when a briefing section "
-    "asks for meal suggestions), call plan_meals: it returns the meals still ahead today, their goals and what "
-    "they've eaten, the last week's pattern and their pantry, plus how to plan. When they say they used up, "
-    "finished or bought food, update the pantry."
+    "asks for meal suggestions), call plan_meals: it returns the meals still ahead today, the free time in their "
+    "calendar, their goals and what they've eaten, the last week's pattern and their pantry, plus how to plan. "
+    "When they say they used up, finished or bought food, update the pantry and the shopping list."
 )
 PLAN_GUIDE = (
     "Plan ONLY the meals in upcoming_meals (it is local_time now: don't suggest meals that are already over, e.g. "
-    "no breakfast in the evening; if the list is empty, at most suggest a light snack). Split what's `remaining` "
-    "of today's goals across those meals (more at main meals than snacks) and stay within what's left of the "
-    "limits (sugar, saturated fat). Build the meals from the pantry first, using items with the fewest days_left "
-    "first; keep things to buy to a minimum. Lean towards the nutrients in last_7_days.often_short, go easy on "
-    "often_over_limit, and avoid repeating recent_foods. If `weight` shows a goal and the trend isn't moving "
-    "towards it, adjust portions (e.g. more calories when a weight-gain goal stalls). Respect the user's diet and "
-    "preferences. For each meal "
-    "give: a name, the ingredients with rough amounts (mark the pantry items), approximate kcal / protein / carbs "
-    "/ fat / fiber, and a one-line method. Finish with how the plan covers today's remaining goals and a short "
-    "shopping list (if anything is needed). Offer to log a meal once they've eaten it (log_food) and to update "
-    "the pantry."
+    "no breakfast in the evening; if the list is empty, at most suggest a light snack).\n"
+    "Be realistic about time. For every meal estimate the total time it takes: shopping if something must be "
+    "bought, prepping ingredients, cooking, cooling/resting where it applies, and eating (about 15-30 min). Fit "
+    "each meal into schedule.free_time (between calendar events; travel to and from events also takes time), "
+    "give it a start time, and space meals sensibly: about 3-4 hours between main meals, at least 1.5-2 hours "
+    "after last_logged_at for the next main meal, nothing heavy right before bed. On a busy day plan fewer and "
+    "quicker meals (no-cook, one-pan, leftovers, something to take along) or cook once for two meals rather than "
+    "proposing several elaborate ones back to back; if there isn't time for a meal, say so and suggest a snack "
+    "that can be eaten on the go. If `schedule` is null the calendar isn't connected: ask or assume an ordinary day.\n"
+    "Split what's `remaining` of today's goals across the meals you plan (more at main meals than snacks) and stay "
+    "within what's left of the limits (sugar, saturated fat). Build the meals from the pantry first. Items with "
+    "priority=true (starred: close to expiring or already opened) come first: include as many of them as you "
+    "sensibly can, but they are a priority, not a must, so leave out the ones that don't fit well. Then prefer "
+    "items with the fewest days_left. Keep things to buy to a minimum (check shopping_list: they may already plan "
+    "to buy them). Lean towards the nutrients in last_7_days.often_short, go easy on often_over_limit, and avoid "
+    "repeating recent_foods. If `weight` shows a goal and the trend isn't moving towards it, adjust portions (e.g. "
+    "more calories when a weight-gain goal stalls). Respect the user's diet and preferences.\n"
+    "For each meal give: the start time and total time (prep / cook / eat), a name, the ingredients with rough "
+    "amounts (mark pantry items, ★ for priority ones), approximate kcal / protein / carbs / fat / fiber, and a "
+    "short method. Finish with how the plan covers today's remaining goals, which priority items it uses (and any "
+    "it couldn't), and what to buy; offer to add those to the shopping list (add_shopping_items), to log meals "
+    "once eaten (log_food) and to update the pantry."
+)
+RECEIPT_GUIDE = (
+    "From a shopping receipt or photo: add each food item with a clear, everyday name (\"Oat milk\", not "
+    "\"OATLY HAVRE 1L\"), the amount when it's shown, and leave out non-food lines, deposits and bags. Items on the "
+    "shopping list with the same name are removed from it automatically; then look at shopping_list_now for "
+    "near matches (e.g. \"Milk\" when they bought \"Oat milk\") and remove those with delete_shopping_items."
 )
 
 INSTRUCTIONS = (
@@ -62,8 +79,11 @@ INSTRUCTIONS = (
     "delete_workout), budget (add_budget_entry, update_budget_entry, delete_budget_entry, set_budget; expenses "
     "use a fixed list of sub-categories, see add_budget_entry), "
     "and reminders (add_reminder, update_reminder, delete_reminder; they can repeat daily, weekly or monthly). "
-    "For meal suggestions use plan_meals. They keep a pantry (get_pantry; add_pantry_items for one or many items in a single call, "
-    "update_pantry_item, delete_pantry_item). "
+    "For meal suggestions use plan_meals. They keep a pantry and a shopping list (get_pantry returns both; "
+    "add_pantry_items / add_shopping_items take one or many items in one call; move_to_pantry when bought, "
+    "move_to_shopping_list when used up; set_pantry_priority stars items to use first). "
+    "You can also add, change and delete Google Calendar events (add_calendar_event, update_calendar_event, "
+    "delete_calendar_event); confirm before deleting events. "
     + MEAL_GUIDE + " "
     "When the user asks to be briefed (\"brief me\", \"what's my day like\", \"morning briefing\"...), call "
     "get_briefing first and answer from it, following its \"How to answer\" part."
@@ -174,16 +194,18 @@ def get_briefing() -> str:
 
 @mcp.tool(annotations=READ)
 def get_calendar(days: int = 7) -> dict:
-    """Google Calendar events from today for `days` days (1-31), with local start/end times and durations."""
+    """Google Calendar events from today for `days` days (1-31), with local start/end times and durations, each
+    with its `id` and `calendar_id` (needed to change or delete it), plus the user's calendars (`calendars`:
+    id, name, primary, can_edit)."""
     with _Call() as call:
         data = _widget(call, "calendar", days=max(1, min(days, 31)))
         if data.get("needs_setup"):
             return {"error": "The calendar isn't connected on the dashboard yet"}
         return {"events": [
-            {"when": google_calendar._when(e), "title": e["title"], "location": e["location"], "calendar": e["calendar"],
-             "all_day": e["all_day"], "start": e["start"], "end": e["end"]}
+            {"id": e["id"], "calendar_id": e["calendar_id"], "when": google_calendar._when(e), "title": e["title"],
+             "location": e["location"], "calendar": e["calendar"], "all_day": e["all_day"], "start": e["start"], "end": e["end"]}
             for e in data["events"]
-        ]}
+        ], "calendars": data.get("calendar_list", [])}
 
 
 @mcp.tool(annotations=READ)
@@ -278,6 +300,66 @@ def get_news(topic: Optional[str] = None, limit: int = 10) -> dict:
         if topic in news.TOPIC_CHOICES:
             overrides["topic"] = topic
         return _widget(call, "news", **overrides)
+
+
+# ---- Calendar (changes) ----
+
+EVENT_FIELDS = ("summary", "location", "description", "start", "end")
+
+
+def _event_snapshot(event: dict) -> dict:
+    return {k: event[k] for k in EVENT_FIELDS if k in event}
+
+
+def _event_out(event: dict) -> dict:
+    start, end = event.get("start") or {}, event.get("end") or {}
+    return {"id": event.get("id"), "title": event.get("summary"), "start": start.get("dateTime") or start.get("date"),
+            "end": end.get("dateTime") or end.get("date"), "location": event.get("location"), "link": event.get("htmlLink")}
+
+
+@mcp.tool(annotations=WRITE)
+def add_calendar_event(title: str, start: str, end: Optional[str] = None, all_day: bool = False,
+                       location: Optional[str] = None, description: Optional[str] = None,
+                       calendar_id: str = "primary") -> dict:
+    """Calendar: add an event to the user's Google Calendar. Timed: `start`/`end` local times like
+    2026-10-07T18:00 (end defaults to 1 hour later). All-day: all_day=true with dates like 2026-10-07 (end =
+    last day, inclusive). `calendar_id`: from get_calendar's calendars (default: their main calendar). Undoable."""
+    with _Call() as call:
+        body = google_calendar.event_body(title, start, end, all_day, TIMEZONE, location, description)
+        event = _run(google_calendar.create_event, call.db, call.user, calendar_id, body)
+        call.record("add_calendar_event", f'Added "{title}" to the calendar ({start})',
+                    {"action": "delete_calendar_event", "args": {"calendar_id": calendar_id, "event_id": event["id"]}})
+        return _event_out(event)
+
+
+@mcp.tool(annotations=EDIT)
+def update_calendar_event(event_id: str, calendar_id: str = "primary", title: Optional[str] = None,
+                          start: Optional[str] = None, end: Optional[str] = None, all_day: Optional[bool] = None,
+                          location: Optional[str] = None, description: Optional[str] = None) -> dict:
+    """Calendar: change an event (ids and calendar_id from get_calendar): its title, time (`start`/`end` as in
+    add_calendar_event; give both when moving it), location or description. Only the fields given change. For
+    a repeating event this changes just that occurrence. Undoable."""
+    with _Call() as call:
+        before = _run(google_calendar.get_event, call.db, call.user, calendar_id, event_id)
+        is_all_day = all_day if all_day is not None else "date" in (before.get("start") or {})
+        body = google_calendar.event_body(title, start, end, is_all_day, TIMEZONE, location, description)
+        event = _run(google_calendar.update_event, call.db, call.user, calendar_id, event_id, body)
+        call.record("update_calendar_event", f'Changed "{before.get("summary")}" in the calendar',
+                    {"action": "restore_calendar_event", "args": {"calendar_id": calendar_id, "event_id": event_id,
+                                                                  "body": _event_snapshot(before)}})
+        return _event_out(event)
+
+
+@mcp.tool(annotations=DELETE)
+def delete_calendar_event(event_id: str, calendar_id: str = "primary") -> str:
+    """Calendar: delete an event (ids and calendar_id from get_calendar). Confirm with the user first. For a
+    repeating event this deletes just that occurrence. Can be undone (it comes back as a new event)."""
+    with _Call() as call:
+        before = _run(google_calendar.get_event, call.db, call.user, calendar_id, event_id)
+        _run(google_calendar.delete_event, call.db, call.user, calendar_id, event_id)
+        call.record("delete_calendar_event", f'Deleted "{before.get("summary")}" from the calendar',
+                    {"action": "recreate_calendar_event", "args": {"calendar_id": calendar_id, "body": _event_snapshot(before)}})
+        return "Deleted"
 
 
 # ---- Reminders ----
@@ -458,15 +540,53 @@ def log_saved_food(food: str, grams: Optional[float] = None, day: Optional[str] 
 
 # ---- Meal planning ----
 
+def _schedule_today(call: _Call, now: datetime) -> Optional[dict]:
+    """Today's remaining calendar events and the free time between them (until 23:00), or None
+    when the calendar isn't connected."""
+    try:
+        data = _widget(call, "calendar", days=1)
+    except ToolError:
+        return None
+    if data.get("needs_setup"):
+        return None
+    day_end = now.replace(hour=23, minute=0, second=0, microsecond=0)
+    busy, events, all_day = [], [], []
+    for e in data["events"]:
+        if e["all_day"]:
+            all_day.append(e["title"])
+            continue
+        start = datetime.fromisoformat(e["start"]).astimezone(now.tzinfo)
+        end = datetime.fromisoformat(e["end"]).astimezone(now.tzinfo) if e["end"] else start
+        if end <= now or start >= day_end:
+            continue
+        events.append({"title": e["title"], "from": f"{start:%H:%M}", "to": f"{end:%H:%M}", "location": e["location"]})
+        busy.append((max(start, now), min(end, day_end)))
+    free, cursor = [], now
+    for start, end in sorted(busy):
+        if start > cursor:
+            free.append((cursor, start))
+        cursor = max(cursor, end)
+    if cursor < day_end:
+        free.append((cursor, day_end))
+    return {
+        "events_left_today": events,
+        "all_day": all_day,
+        "free_time": [{"from": f"{a:%H:%M}", "to": f"{b:%H:%M}", "minutes": int((b - a).total_seconds() // 60)}
+                      for a, b in free if (b - a).total_seconds() >= 15 * 60],
+    }
+
+
 @mcp.tool(annotations=READ, description=(
-    "Nutrition: plan the rest of today's meals. Returns the local time and the meals still ahead, today's goals "
-    "with what's eaten and what's remaining, the last 7 days' averages (often short / often over), foods eaten "
-    "recently, the pantry (soonest best-before first) and `how_to_plan`. Use it whenever the user asks for meal "
+    "Nutrition: plan the rest of today's meals. Returns the local time, the meals still ahead, today's calendar "
+    "(events left and free time), today's goals with what's eaten and when, the last 7 days' averages (often short "
+    "/ often over), foods eaten recently, the pantry (★ priority items first), the shopping list and `how_to_plan`. Use it whenever the user asks for meal "
     "suggestions or a meal plan.\n\n" + PLAN_GUIDE))
 def plan_meals() -> dict:
     with _Call() as call:
         _run(widget_row, call.db, call.user, nutrition.WIDGET_ID)
-        context = nutrition.meal_plan_context(call.db, call.user, datetime.now(_zone()))
+        now = datetime.now(_zone())
+        context = nutrition.meal_plan_context(call.db, call.user, now)
+        context["schedule"] = _schedule_today(call, now)
         try:  # the Weight widget is optional
             data = REGISTRY["weight"].fetch(call.db, call.user, REGISTRY["weight"].settings_for(
                 widget_row(call.db, call.user, weight.WIDGET_ID)), _ctx())
@@ -476,64 +596,146 @@ def plan_meals() -> dict:
         return {**context, "how_to_plan": PLAN_GUIDE}
 
 
-# ---- Pantry (food at home; not part of the briefing) ----
+# ---- Pantry & shopping list (not part of the briefing) ----
 
-def _find_pantry_item(call: _Call, item_id: str) -> dict:
-    row = _run(widget_row, call.db, call.user, nutrition.WIDGET_ID)
-    item = next((i for i in nutrition._pantry(row) if i["id"] == item_id), None)
-    if item is None:
-        raise ToolError("Pantry item not found (ids from get_pantry)")
-    return item
+def _lists_result(result: dict) -> dict:
+    return {k: v for k, v in result.items() if k != "undo"}
+
+
+def _record_lists(call: _Call, tool: str, summary: str, undo: dict) -> None:
+    call.record(tool, summary[:200], {"action": "restore_lists", "args": {"undo": undo}})
 
 
 @mcp.tool(annotations=READ, description=(
-    "Pantry: the food the user has at home (id, name, amount, best-before date `expires`), in alphabetical "
-    "order.\n\n" + MEAL_GUIDE))
+    "Pantry & shopping list: `items` is the food the user has at home (id, name, amount, best-before `expires`, "
+    "`priority` = starred to use first), `shopping` is their shopping list (id, name, amount, note); both "
+    "alphabetical.\n\n" + MEAL_GUIDE))
 def get_pantry() -> dict:
     with _Call() as call:
         return _run(nutrition.list_pantry, user=call.user, db=call.db)
 
 
-@mcp.tool(annotations=WRITE)
+@mcp.tool(annotations=WRITE, description=(
+    "Pantry: add food the user has at home - one item or a whole list in a single call (use this for lists and "
+    "receipts). Each item: `name`, optional `amount` (\"500 g\", \"6\", \"half a bag\"), optional `expires` "
+    "(best-before like 2026-10-12) and optional `priority` (true to star it). An item already in the pantry (same "
+    "name) is updated instead of duplicated. Shopping-list items with the same names are taken off the list. "
+    "Undoable as one change.\n\n" + RECEIPT_GUIDE))
 def add_pantry_items(items: list[nutrition.PantryItemIn]) -> dict:
-    """Pantry: add food items the user has at home - one or a whole list in a single call (use this when the
-    user gives a list). Each item: `name`, optional `amount` (free text like "500 g", "6", "half a bag") and
-    optional `expires` (best-before date like 2026-10-12). An item already in the pantry (same name) gets its
-    amount/date updated instead of a duplicate. Undoable as one change."""
     with _Call() as call:
         if not items:
             raise ToolError("Give at least one item")
         result = _run(nutrition.add_pantry_items, call.db, call.user, items)
         names = [i["name"] for i in result["added"] + result["updated"]]
-        summary = f"Pantry: added {len(result['added'])}, updated {len(result['updated'])} ({', '.join(names)[:150]})"
-        call.record("add_pantry_items", summary, {"action": "undo_pantry_items", "args": {
-            "added": [i["id"] for i in result["added"]], "before": result["before"]}})
-        return {"added": result["added"], "updated": result["updated"]}
+        off = result["removed_from_shopping_list"]
+        _record_lists(call, "add_pantry_items", f"Pantry: added {len(result['added'])}, updated {len(result['updated'])} "
+                      f"({', '.join(names)})" + (f"; off the shopping list: {', '.join(off)}" if off else ""), result["undo"])
+        row = _run(widget_row, call.db, call.user, nutrition.WIDGET_ID)
+        return {**_lists_result(result), "shopping_list_now": [i["name"] for i in nutrition._items(row, "shopping")]}
 
 
 @mcp.tool(annotations=EDIT)
 def update_pantry_item(item_id: str, name: Optional[str] = None, amount: Optional[str] = None,
-                       expires: Optional[str] = None, clear_expires: bool = False) -> dict:
-    """Pantry: change an item's name, amount (e.g. what's left after cooking) or best-before date (or
-    clear_expires=true). Ids from get_pantry. Use delete_pantry_item when something is used up."""
+                       expires: Optional[str] = None, clear_expires: bool = False, priority: Optional[bool] = None) -> dict:
+    """Pantry: change an item's name, amount (e.g. what's left after cooking), best-before date (or
+    clear_expires=true) or priority star. Ids from get_pantry."""
     with _Call() as call:
-        before = _find_pantry_item(call, item_id)
-        fields: dict[str, Any] = {k: v for k, v in (("name", name), ("amount", amount)) if v is not None}
+        changes: dict[str, Any] = {k: v for k, v in (("name", name), ("amount", amount), ("priority", priority)) if v is not None}
         if expires or clear_expires:
-            fields["expires"] = None if clear_expires else _day(expires)
-        item = _run(nutrition.update_pantry_item, item_id, nutrition.PantryItemPatch(**fields), user=call.user, db=call.db)
-        call.record("update_pantry_item", f'Changed {before["name"]} in the pantry', {"action": "restore_pantry_item", "args": {"item": before}})
+            changes["expires"] = None if clear_expires else _day(expires).isoformat()
+        item, undo = _run(nutrition.update_item, call.db, call.user, "pantry", item_id, changes)
+        _record_lists(call, "update_pantry_item", f'Changed {item["name"]} in the pantry', undo)
+        return item
+
+
+@mcp.tool(annotations=EDIT)
+def set_pantry_priority(item_ids: list[str], priority: bool = True) -> dict:
+    """Pantry: star (priority=true) or unstar (false) items. Starred items are used first in meal plans: the
+    user stars food that's close to expiring or already opened (e.g. an opened can). Ids from get_pantry."""
+    with _Call() as call:
+        row = _run(widget_row, call.db, call.user, nutrition.WIDGET_ID)
+        known = {i["id"]: i for i in nutrition._items(row, "pantry")}
+        missing = [i for i in item_ids if i not in known]
+        if missing or not item_ids:
+            raise ToolError("Pantry item not found (ids from get_pantry)")
+        undo = nutrition._new_undo()
+        for item_id in item_ids:
+            undo["pantry"]["before"] += _run(nutrition.update_item, call.db, call.user, "pantry", item_id, {"priority": priority})[1]["pantry"]["before"]
+        names = ", ".join(known[i]["name"] for i in item_ids)
+        _record_lists(call, "set_pantry_priority", f"{'Starred' if priority else 'Unstarred'} in the pantry: {names}", undo)
+        return {"changed": len(item_ids), "priority": priority}
+
+
+@mcp.tool(annotations=DELETE)
+def delete_pantry_items(item_ids: list[str]) -> str:
+    """Pantry: remove items (used up or thrown away; to buy them again use move_to_shopping_list instead).
+    Ids from get_pantry. Undoable."""
+    with _Call() as call:
+        gone, undo = _run(nutrition.delete_items, call.db, call.user, "pantry", item_ids)
+        _record_lists(call, "delete_pantry_items", "Removed from the pantry: " + ", ".join(i["name"] for i in gone), undo)
+        return f"Removed {len(gone)}"
+
+
+@mcp.tool(annotations=READ)
+def get_shopping_list() -> dict:
+    """Shopping list: what the user plans to buy (id, name, amount, note), alphabetical."""
+    with _Call() as call:
+        return {"items": _run(nutrition.list_pantry, user=call.user, db=call.db)["shopping"]}
+
+
+@mcp.tool(annotations=WRITE)
+def add_shopping_items(items: list[nutrition.ShoppingItemIn]) -> dict:
+    """Shopping list: add things to buy - one or many in a single call. Each item: `name`, optional `amount`
+    and `note` (e.g. a brand). An item already on the list (same name) is updated instead of duplicated."""
+    with _Call() as call:
+        if not items:
+            raise ToolError("Give at least one item")
+        result = _run(nutrition.add_shopping_items, call.db, call.user, items)
+        names = [i["name"] for i in result["added"] + result["updated"]]
+        _record_lists(call, "add_shopping_items", "Shopping list: added " + ", ".join(names), result["undo"])
+        return _lists_result(result)
+
+
+@mcp.tool(annotations=EDIT)
+def update_shopping_item(item_id: str, name: Optional[str] = None, amount: Optional[str] = None,
+                         note: Optional[str] = None) -> dict:
+    """Shopping list: change an item's name, amount or note. Ids from get_shopping_list / get_pantry."""
+    with _Call() as call:
+        changes = {k: v for k, v in (("name", name), ("amount", amount), ("note", note)) if v is not None}
+        item, undo = _run(nutrition.update_item, call.db, call.user, "shopping", item_id, changes)
+        _record_lists(call, "update_shopping_item", f'Changed {item["name"]} on the shopping list', undo)
         return item
 
 
 @mcp.tool(annotations=DELETE)
-def delete_pantry_item(item_id: str) -> str:
-    """Pantry: remove an item (used up or thrown away). Can be undone from the dashboard."""
+def delete_shopping_items(item_ids: list[str]) -> str:
+    """Shopping list: remove items (no longer needed, or bought - but to put bought items in the pantry use
+    move_to_pantry). Undoable."""
     with _Call() as call:
-        before = _find_pantry_item(call, item_id)
-        _run(nutrition.delete_pantry_item, item_id, user=call.user, db=call.db)
-        call.record("delete_pantry_item", f'Removed {before["name"]} from the pantry', {"action": "restore_pantry_item", "args": {"item": before}})
-        return "Deleted"
+        gone, undo = _run(nutrition.delete_items, call.db, call.user, "shopping", item_ids)
+        _record_lists(call, "delete_shopping_items", "Off the shopping list: " + ", ".join(i["name"] for i in gone), undo)
+        return f"Removed {len(gone)}"
+
+
+@mcp.tool(annotations=WRITE)
+def move_to_pantry(item_ids: list[str]) -> dict:
+    """Shopping list -> pantry: the user bought these (ids from get_shopping_list). Afterwards set amounts or
+    best-before dates with update_pantry_item if you know them. Undoable."""
+    with _Call() as call:
+        result = _run(nutrition.move_items, call.db, call.user, "shopping", item_ids)
+        names = [i["name"] for i in result["added"] + result["updated"]]
+        _record_lists(call, "move_to_pantry", "Bought (shopping list → pantry): " + ", ".join(names), result["undo"])
+        return _lists_result(result)
+
+
+@mcp.tool(annotations=WRITE)
+def move_to_shopping_list(item_ids: list[str]) -> dict:
+    """Pantry -> shopping list: these are used up and need buying again (ids from get_pantry). Undoable."""
+    with _Call() as call:
+        result = _run(nutrition.move_items, call.db, call.user, "pantry", item_ids)
+        names = [i["name"] for i in result["added"] + result["updated"]]
+        _record_lists(call, "move_to_shopping_list", "Used up (pantry → shopping list): " + ", ".join(names), result["undo"])
+        return _lists_result(result)
 
 
 # ---- Weight ----

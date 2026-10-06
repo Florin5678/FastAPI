@@ -445,126 +445,267 @@ def meal_plan_context(db: Session, user: User, now: datetime) -> dict:
     pantry = []
     for item in _pantry(widget_row(db, user, WIDGET_ID)):
         days_left = (date.fromisoformat(item["expires"]) - today).days if item.get("expires") else None
-        pantry.append({"name": item["name"], "amount": item["amount"], "best_before": item.get("expires"),
-                       "days_left": days_left})
-    pantry.sort(key=lambda i: (i["days_left"] is None, i["days_left"] if i["days_left"] is not None else 0))
+        pantry.append({"name": item["name"], "amount": item["amount"], "priority": bool(item.get("priority")),
+                       "best_before": item.get("expires"), "days_left": days_left})
+    # Starred first, then the soonest best-before
+    pantry.sort(key=lambda i: (not i["priority"], i["days_left"] is None, i["days_left"] if i["days_left"] is not None else 0))
+
+    # When food was last logged (roughly when they last ate), local time
+    logged = [datetime.fromisoformat(e["added_at"].replace("Z", "+00:00")) for e in summary["entries"] if e["added_at"]]
+    last_logged = f"{max(logged).astimezone(now.tzinfo):%H:%M}" if logged else None
 
     return {
         "local_time": now.strftime("%A %d %B %Y, %H:%M"),
         "upcoming_meals": [name for name, ends in MEALS if now.time() < ends],
         "today": {"nutrients": nutrients, "eaten": [f"{e['name']}" + (f" ({e['grams']:g} g)" if e["grams"] else "")
-                                                    for e in reversed(summary["entries"])]},
+                                                    for e in reversed(summary["entries"])],
+                  "last_logged_at": last_logged},
         "last_7_days": {"days_logged": len(logged), "averages": averages, "often_short": often_short,
                         "often_over_limit": often_over},
         "recent_foods": sorted(name for (name,) in recent),
-        "pantry": pantry,  # soonest best-before first
+        "pantry": pantry,  # ★ priority first, then soonest best-before
+        "shopping_list": [i["name"] for i in _items(widget_row(db, user, WIDGET_ID), "shopping")],
     }
 
 
-# ---- Pantry ----
+# ---- Pantry & shopping list ----
+# Two lists in the widget's row, alphabetical: config["pantry"] (food at home: name, amount,
+# best-before, priority star) and config["shopping"] (name, amount, note). Every change
+# returns `undo`: per list, the ids it added and the previous versions of the items it
+# changed or removed, so the connector's undo can put back exactly those.
+
+LISTS = {"pantry": "Pantry item", "shopping": "Shopping list item"}
+
 
 class PantryItemIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     amount: str = Field("", max_length=60)  # free text: "500 g", "6", "half a bag"
     expires: Optional[date] = None  # best before
+    priority: Optional[bool] = None  # ★: use first (close to expiring, opened cans...)
 
 
 class PantryItemPatch(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=120)
     amount: Optional[str] = Field(None, max_length=60)
     expires: Optional[date] = None  # send null to clear
+    priority: Optional[bool] = None
 
 
+class ShoppingItemIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    amount: str = Field("", max_length=60)
+    note: str = Field("", max_length=200)
+
+
+class ShoppingItemPatch(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=120)
+    amount: Optional[str] = Field(None, max_length=60)
+    note: Optional[str] = Field(None, max_length=200)
+
+
+def _items(row, kind: str) -> list[dict]:
+    return [dict(i) for i in (row.config or {}).get(kind, [])]
+
+
+def _store(row, kind: str, items: list[dict]) -> list[dict]:
+    if len(items) > MAX_PANTRY_ITEMS:
+        raise HTTPException(status_code=422, detail=f"A list holds up to {MAX_PANTRY_ITEMS} items")
+    items.sort(key=lambda i: i["name"].lower())  # alphabetical
+    row.config = {**(row.config or {}), kind: items}  # JSON columns aren't mutation-tracked
+    return items
+
+
+# (kept for the change log's older undo actions)
 def _pantry(row) -> list[dict]:
-    return [dict(i) for i in (row.config or {}).get("pantry", [])]
+    return _items(row, "pantry")
 
 
 def _store_pantry(row, items: list[dict]) -> list[dict]:
-    items.sort(key=lambda i: i["name"].lower())  # alphabetical
-    row.config = {**(row.config or {}), "pantry": items}  # JSON columns aren't mutation-tracked
-    return items
+    return _store(row, "pantry", items)
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _merge(items: list[dict], kind: str, new: list[dict], undo: dict) -> tuple[list[dict], list[dict]]:
+    """Add `new` items ({name, amount, ...}) to `items`; one already there (same name, any case)
+    is updated with the non-empty fields instead of duplicated. Returns (added, updated)."""
+    by_name = {i["name"].lower(): i for i in items}
+    added, updated = [], []
+    for fields in new:
+        name = fields["name"].strip()
+        existing = by_name.get(name.lower())
+        if existing:
+            undo[kind]["before"].append(dict(existing))
+            for key, value in fields.items():
+                if key != "name" and value not in (None, ""):
+                    existing[key] = value.strip() if isinstance(value, str) else value
+            existing["updated_at"] = _now_iso()
+            updated.append(existing)
+        else:
+            item = {"id": uuid.uuid4().hex[:12], "name": name, "amount": "", "added_at": _now_iso(), "updated_at": _now_iso()}
+            item.update({"expires": None, "priority": False} if kind == "pantry" else {"note": ""})
+            item.update({k: (v.strip() if isinstance(v, str) else v) for k, v in fields.items() if k != "name" and v is not None})
+            items.append(item)
+            by_name[name.lower()] = item
+            undo[kind]["added"].append(item["id"])
+            added.append(item)
+    return added, updated
+
+
+def _new_undo() -> dict:
+    return {kind: {"added": [], "before": []} for kind in LISTS}
+
+
+def _pantry_fields(body: PantryItemIn) -> dict:
+    return {"name": body.name, "amount": body.amount, "expires": body.expires.isoformat() if body.expires else None,
+            "priority": body.priority}
+
+
+def add_pantry_items(db: Session, user: User, new: list[PantryItemIn]) -> dict:
+    """Add items to the pantry (merging ones already there) and take the same names off the
+    shopping list (they've been bought)."""
+    row = widget_row(db, user, WIDGET_ID)
+    undo = _new_undo()
+    pantry, shopping = _items(row, "pantry"), _items(row, "shopping")
+    added, updated = _merge(pantry, "pantry", [_pantry_fields(b) for b in new], undo)
+    names = {b.name.strip().lower() for b in new}
+    bought = [i for i in shopping if i["name"].lower() in names]
+    undo["shopping"]["before"] += bought
+    _store(row, "pantry", pantry)
+    _store(row, "shopping", [i for i in shopping if i not in bought])
+    db.commit()
+    return {"added": added, "updated": updated, "removed_from_shopping_list": [i["name"] for i in bought], "undo": undo}
+
+
+def add_shopping_items(db: Session, user: User, new: list[ShoppingItemIn]) -> dict:
+    row = widget_row(db, user, WIDGET_ID)
+    undo = _new_undo()
+    shopping = _items(row, "shopping")
+    added, updated = _merge(shopping, "shopping", [b.model_dump() for b in new], undo)
+    _store(row, "shopping", shopping)
+    db.commit()
+    return {"added": added, "updated": updated, "undo": undo}
+
+
+def update_item(db: Session, user: User, kind: str, item_id: str, changes: dict) -> tuple[dict, dict]:
+    """Change one item (`changes`: only the fields to set; expires None clears it)."""
+    row = widget_row(db, user, WIDGET_ID)
+    items = _items(row, kind)
+    item = next((i for i in items if i["id"] == item_id), None)
+    if item is None:
+        raise HTTPException(status_code=404, detail=f"{LISTS[kind]} not found")
+    undo = _new_undo()
+    undo[kind]["before"].append(dict(item))
+    for key, value in changes.items():
+        item[key] = value.strip() if isinstance(value, str) else value
+    item["updated_at"] = _now_iso()
+    _store(row, kind, items)
+    db.commit()
+    return item, undo
+
+
+def delete_items(db: Session, user: User, kind: str, item_ids: list[str]) -> tuple[list[dict], dict]:
+    row = widget_row(db, user, WIDGET_ID)
+    items = _items(row, kind)
+    gone = [i for i in items if i["id"] in item_ids]
+    if len(gone) != len(set(item_ids)):
+        raise HTTPException(status_code=404, detail=f"{LISTS[kind]} not found")
+    undo = _new_undo()
+    undo[kind]["before"] += gone
+    _store(row, kind, [i for i in items if i["id"] not in item_ids])
+    db.commit()
+    return gone, undo
+
+
+def move_items(db: Session, user: User, source: str, item_ids: list[str]) -> dict:
+    """Move items from one list to the other: shopping -> pantry (bought) or pantry ->
+    shopping (used up, buy again). Names already on the other list are merged."""
+    target = "pantry" if source == "shopping" else "shopping"
+    row = widget_row(db, user, WIDGET_ID)
+    items = _items(row, source)
+    moving = [i for i in items if i["id"] in item_ids]
+    if len(moving) != len(set(item_ids)):
+        raise HTTPException(status_code=404, detail=f"{LISTS[source]} not found")
+    undo = _new_undo()
+    undo[source]["before"] += moving
+    others = _items(row, target)
+    keep = ("name", "amount", "expires", "priority") if target == "pantry" else ("name", "amount", "note")
+    added, updated = _merge(others, target, [{k: v for k, v in i.items() if k in keep} for i in moving], undo)
+    _store(row, source, [i for i in items if i["id"] not in item_ids])
+    _store(row, target, others)
+    db.commit()
+    return {"moved_to": target, "added": added, "updated": updated, "undo": undo}
+
+
+def restore_lists(db: Session, user: User, undo: dict) -> None:
+    """Reverse a change: drop the items it added, put back the previous versions of the rest."""
+    row = widget_row(db, user, WIDGET_ID)
+    for kind, change in undo.items():
+        before = {i["id"]: i for i in change.get("before", [])}
+        items = [i for i in _items(row, kind) if i["id"] not in change.get("added", []) and i["id"] not in before]
+        _store(row, kind, items + list(before.values()))
+    db.commit()
 
 
 @router.get("/pantry")
 def list_pantry(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return {"items": _pantry(widget_row(db, user, WIDGET_ID))}
+    row = widget_row(db, user, WIDGET_ID)
+    return {"items": _items(row, "pantry"), "shopping": _items(row, "shopping")}
 
 
 @router.post("/pantry")
 def add_pantry_item(body: PantryItemIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     row = widget_row(db, user, WIDGET_ID)
-    items = _pantry(row)
-    if len(items) >= MAX_PANTRY_ITEMS:
-        raise HTTPException(status_code=422, detail=f"The pantry holds up to {MAX_PANTRY_ITEMS} items")
-    now = datetime.now(timezone.utc).isoformat()
-    item = {"id": uuid.uuid4().hex[:12], "name": body.name.strip(), "amount": body.amount.strip(),
-            "expires": body.expires.isoformat() if body.expires else None, "added_at": now, "updated_at": now}
-    _store_pantry(row, [*items, item])
+    pantry = _items(row, "pantry")
+    added, updated = _merge(pantry, "pantry", [_pantry_fields(body)], _new_undo())
+    _store(row, "pantry", pantry)
     db.commit()
-    return item
-
-
-def add_pantry_items(db: Session, user: User, new: list[PantryItemIn]) -> dict:
-    """Add several items at once; an item whose name is already in the pantry (any case)
-    gets its amount/best-before updated instead of a duplicate. Returns what changed,
-    with the previous versions of updated items (for undo)."""
-    row = widget_row(db, user, WIDGET_ID)
-    items = _pantry(row)
-    by_name = {i["name"].lower(): i for i in items}
-    now = datetime.now(timezone.utc).isoformat()
-    added, updated, before = [], [], []
-    for body in new:
-        name = body.name.strip()
-        existing = by_name.get(name.lower())
-        if existing:
-            before.append(dict(existing))
-            if body.amount.strip():
-                existing["amount"] = body.amount.strip()
-            if body.expires:
-                existing["expires"] = body.expires.isoformat()
-            existing["updated_at"] = now
-            updated.append(existing)
-        else:
-            item = {"id": uuid.uuid4().hex[:12], "name": name, "amount": body.amount.strip(),
-                    "expires": body.expires.isoformat() if body.expires else None, "added_at": now, "updated_at": now}
-            items.append(item)
-            by_name[name.lower()] = item
-            added.append(item)
-    if len(items) > MAX_PANTRY_ITEMS:
-        raise HTTPException(status_code=422, detail=f"The pantry holds up to {MAX_PANTRY_ITEMS} items")
-    _store_pantry(row, items)
-    db.commit()
-    return {"added": added, "updated": updated, "before": before}
+    return (added or updated)[0]
 
 
 @router.patch("/pantry/{item_id}")
 def update_pantry_item(item_id: str, body: PantryItemPatch, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    row = widget_row(db, user, WIDGET_ID)
-    items = _pantry(row)
-    item = next((i for i in items if i["id"] == item_id), None)
-    if item is None:
-        raise HTTPException(status_code=404, detail="Pantry item not found")
-    if body.name is not None:
-        item["name"] = body.name.strip()
-    if body.amount is not None:
-        item["amount"] = body.amount.strip()
-    if "expires" in body.model_fields_set:
-        item["expires"] = body.expires.isoformat() if body.expires else None
-    item["updated_at"] = datetime.now(timezone.utc).isoformat()
-    _store_pantry(row, items)
-    db.commit()
-    return item
+    changes = body.model_dump(exclude_unset=True)
+    if "expires" in changes:
+        changes["expires"] = body.expires.isoformat() if body.expires else None
+    return update_item(db, user, "pantry", item_id, changes)[0]
 
 
 @router.delete("/pantry/{item_id}")
 def delete_pantry_item(item_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    row = widget_row(db, user, WIDGET_ID)
-    items = _pantry(row)
-    if not any(i["id"] == item_id for i in items):
-        raise HTTPException(status_code=404, detail="Pantry item not found")
-    _store_pantry(row, [i for i in items if i["id"] != item_id])
-    db.commit()
+    delete_items(db, user, "pantry", [item_id])
     return {"deleted": item_id}
+
+
+@router.post("/pantry/{item_id}/to-shopping")
+def pantry_to_shopping(item_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Used up: move it to the shopping list."""
+    return {k: v for k, v in move_items(db, user, "pantry", [item_id]).items() if k != "undo"}
+
+
+@router.post("/shopping")
+def add_shopping_item(body: ShoppingItemIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    result = add_shopping_items(db, user, [body])
+    return (result["added"] or result["updated"])[0]
+
+
+@router.patch("/shopping/{item_id}")
+def update_shopping_item(item_id: str, body: ShoppingItemPatch, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return update_item(db, user, "shopping", item_id, body.model_dump(exclude_unset=True))[0]
+
+
+@router.delete("/shopping/{item_id}")
+def delete_shopping_item(item_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    delete_items(db, user, "shopping", [item_id])
+    return {"deleted": item_id}
+
+
+@router.post("/shopping/{item_id}/to-pantry")
+def shopping_to_pantry(item_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Bought: move it to the pantry."""
+    return {k: v for k, v in move_items(db, user, "shopping", [item_id]).items() if k != "undo"}
 
 
 def _per_100g(food: dict) -> dict:

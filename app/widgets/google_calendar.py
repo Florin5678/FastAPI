@@ -1,7 +1,8 @@
 # Google Calendar widget: upcoming events from the calendars selected in Google Calendar.
-# Read-only (calendar.readonly scope). Needs the Google Calendar API enabled in Google
-# Cloud Console and one sign-in after the scope was added; until then the widget shows
-# what to do instead of an error.
+# The tile only reads; create_event / update_event / delete_event below are for Claude
+# (connector tools) and need the calendar.events scope (one sign-in after it was added).
+# Needs the Google Calendar API enabled in Google Cloud Console; until then the widget
+# shows what to do instead of an error.
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from typing import Optional
@@ -9,7 +10,9 @@ from urllib.parse import quote
 
 from sqlalchemy.orm import Session
 
-from app.core.google_api import NeedsSetup, google_get
+from fastapi import HTTPException
+
+from app.core.google_api import NeedsSetup, google_get, google_request
 from app.core.timeutil import local_zone
 from app.auth.google_tokens import get_valid_access_token
 from app.models import User
@@ -38,6 +41,7 @@ def _event(e: dict, calendar: dict) -> Optional[dict]:
         "location": e.get("location"),
         "link": e.get("htmlLink"),
         "calendar": calendar.get("summaryOverride") or calendar.get("summary"),
+        "calendar_id": calendar.get("id"),
         "color": calendar.get("backgroundColor"),
     }
 
@@ -86,6 +90,9 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
         "days": settings["days"],
         "today": start.date().isoformat(),
         "calendars": len(calendars),
+        "calendar_list": [{"id": c["id"], "name": c.get("summaryOverride") or c.get("summary"),
+                           "primary": bool(c.get("primary")), "can_edit": c.get("accessRole") in ("owner", "writer")}
+                          for c in calendars],
         "events": events,
     }
 
@@ -113,6 +120,63 @@ def _when(e: dict) -> str:
     minutes = int((end - start).total_seconds() // 60)
     end_text = f"{end:%H:%M}" if end.date() == start.date() else f"{end:%a %d %b %H:%M}"
     return f"{start:%a %d %b %H:%M}–{end_text} ({_duration(minutes)})"
+
+
+# ---- Changing events (Claude, through the connector) ----
+
+def _event_url(calendar_id: str, event_id: Optional[str] = None) -> str:
+    return f"{API}/calendars/{quote(calendar_id, safe='')}/events" + (f"/{quote(event_id, safe='')}" if event_id else "")
+
+
+def _call(db: Session, user: User, method: str, url: str, body: Optional[dict] = None):
+    try:
+        token = get_valid_access_token(db, user.id)
+        return google_request(method, url, token, body=body, service="Google Calendar",
+                              not_found="That calendar event wasn't found (it may have been deleted)")
+    except (NeedsSetup, ValueError) as e:
+        raise HTTPException(status_code=403, detail=(
+            "The dashboard isn't allowed to change your Google Calendar yet: sign out of the dashboard and sign in "
+            "again, and allow it to see and edit your calendar events.")) from e
+
+
+def event_body(title: Optional[str], start: Optional[str], end: Optional[str], all_day: bool, tz: str,
+               location: Optional[str] = None, description: Optional[str] = None) -> dict:
+    """Google's event fields from simple values. Timed: start/end like 2026-10-07T18:00 (local
+    time in `tz`) or with an offset; all-day: dates like 2026-10-07 (end inclusive)."""
+    body: dict = {}
+    if title is not None:
+        body["summary"] = title
+    if location is not None:
+        body["location"] = location
+    if description is not None:
+        body["description"] = description
+    if start is not None:
+        if all_day:
+            first = datetime.fromisoformat(start[:10]).date()
+            last = datetime.fromisoformat((end or start)[:10]).date()
+            body["start"], body["end"] = {"date": first.isoformat()}, {"date": (last + timedelta(days=1)).isoformat()}
+        else:
+            begin = datetime.fromisoformat(start)
+            finish = datetime.fromisoformat(end) if end else begin + timedelta(hours=1)
+            body["start"] = {"dateTime": begin.isoformat(timespec="minutes"), "timeZone": tz}
+            body["end"] = {"dateTime": finish.isoformat(timespec="minutes"), "timeZone": tz}
+    return body
+
+
+def get_event(db: Session, user: User, calendar_id: str, event_id: str) -> dict:
+    return _call(db, user, "GET", _event_url(calendar_id, event_id))
+
+
+def create_event(db: Session, user: User, calendar_id: str, body: dict) -> dict:
+    return _call(db, user, "POST", _event_url(calendar_id), body)
+
+
+def update_event(db: Session, user: User, calendar_id: str, event_id: str, body: dict) -> dict:
+    return _call(db, user, "PATCH", _event_url(calendar_id, event_id), body)
+
+
+def delete_event(db: Session, user: User, calendar_id: str, event_id: str) -> None:
+    _call(db, user, "DELETE", _event_url(calendar_id, event_id))
 
 
 def brief(data: dict, limit: int | None = None) -> str:

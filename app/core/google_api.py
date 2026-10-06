@@ -1,4 +1,4 @@
-# Shared helper for calling Google APIs (currently Calendar) with the user's token.
+# Shared helpers for calling Google APIs (currently Calendar) with the user's token.
 # Missing permissions / a switched-off API become NeedsSetup, which widgets turn into
 # a "connect" or "turn it on" message instead of an error.
 from typing import Optional
@@ -16,7 +16,15 @@ def google_get(url: str, token: str, params: Optional[dict] = None, service: str
                raw: bool = False, not_found: Optional[str] = None):
     """GET a Google API URL. Returns parsed JSON, or the response itself with raw=True
     (for file downloads). not_found: message for a 404 (e.g. a wrong file link)."""
-    response = requests.get(url, headers={"Authorization": f"Bearer {token}"}, params=params, timeout=30)
+    return google_request("GET", url, token, params=params, service=service, raw=raw, not_found=not_found)
+
+
+def google_request(method: str, url: str, token: str, params: Optional[dict] = None, body: Optional[dict] = None,
+                   service: str = "Google", raw: bool = False, not_found: Optional[str] = None):
+    """Any Google API call (GET/POST/PATCH/DELETE). Returns parsed JSON (None for an empty
+    reply), or the response itself with raw=True."""
+    response = requests.request(method, url, headers={"Authorization": f"Bearer {token}"}, params=params,
+                                json=body, timeout=30)
     if response.status_code == 403:
         body = response.text
         if "accessNotConfigured" in body or "SERVICE_DISABLED" in body:
@@ -29,4 +37,6 @@ def google_get(url: str, token: str, params: Optional[dict] = None, service: str
         raise HTTPException(status_code=404, detail=not_found)
     if not response.ok:
         raise HTTPException(status_code=502, detail=f"{service} returned an error ({response.status_code}). Try again later.")
-    return response if raw else response.json()
+    if raw:
+        return response
+    return response.json() if response.content else None

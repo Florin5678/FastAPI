@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models import ConnectorChange, User
-from app.widgets import budget, gym, notes, nutrition, weight
+from app.widgets import budget, google_calendar, gym, notes, nutrition, weight
 
 
 def record(db: Session, user: User, client_id: Optional[str], tool: str, summary: str, undo: Optional[dict]) -> ConnectorChange:
@@ -80,6 +80,10 @@ UNDO_ACTIONS: dict[str, Any] = {
     "readd_food": lambda db, user, a: _readd_food(db, user, a["entry"]),
     "delete_pantry_item": lambda db, user, a: nutrition.delete_pantry_item(a["id"], user=user, db=db),
     "restore_pantry_item": lambda db, user, a: _restore_pantry_item(db, user, a["item"]),
+    "restore_lists": lambda db, user, a: nutrition.restore_lists(db, user, a["undo"]),
+    "delete_calendar_event": lambda db, user, a: google_calendar.delete_event(db, user, a["calendar_id"], a["event_id"]),
+    "restore_calendar_event": lambda db, user, a: google_calendar.update_event(db, user, a["calendar_id"], a["event_id"], a["body"]),
+    "recreate_calendar_event": lambda db, user, a: google_calendar.create_event(db, user, a["calendar_id"], a["body"]),
     "set_weight": lambda db, user, a: weight.log_weight(db, user, date.fromisoformat(a["day"]), a["kg"]),
     "delete_weight": lambda db, user, a: weight.delete_weight(db, user, a["day"]),
     "undo_pantry_items": lambda db, user, a: _undo_pantry_items(db, user, a["added"], a["before"]),
