@@ -465,6 +465,18 @@ def list_saved_foods(user: User = Depends(get_current_user), db: Session = Depen
     return {"foods": _saved_foods(widget_row(db, user, WIDGET_ID))}
 
 
+class SavedFoodPatch(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    grams: Optional[float] = Field(None, gt=0, le=5000)  # usual amount; send null to clear
+    per_100g: Optional[Nutrients] = None
+
+
+@router.patch("/saved-foods/{food_id}")
+def patch_saved_food(food_id: str, body: SavedFoodPatch, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    changes = body.model_dump(exclude_unset=True)
+    return update_saved_food(db, user, food_id, changes)[0]
+
+
 @router.delete("/saved-foods/{food_id}")
 def delete_saved_food(food_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     row = widget_row(db, user, WIDGET_ID)

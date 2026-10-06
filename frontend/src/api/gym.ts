@@ -36,5 +36,7 @@ export const gymApi = {
   month: (month: string) => request<GymMonth>(`/widgets/gym/month?month=${month}`),
   log: (workout: { day: string; kind: string; minutes: number; note?: string }) =>
     request<Workout>('/widgets/gym/workouts', { method: 'POST', ...json(workout) }),
+  update: (id: number, changes: { day?: string; kind?: string; minutes?: number; note?: string }) =>
+    request<Workout>(`/widgets/gym/workouts/${id}`, { method: 'PATCH', ...json(changes) }),
   remove: (id: number) => request<unknown>(`/widgets/gym/workouts/${id}`, { method: 'DELETE' }),
 }

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { gymApi, localDate, type Workout } from '../../api'
 import type { WidgetProps } from '../types'
+import { EditWorkoutDialog } from './EditWorkoutDialog'
 import './gym.css'
 
 export type GymData = {
@@ -43,6 +44,7 @@ export function GymWidget({ data, reload, actions }: WidgetProps<GymData>) {
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [editing, setEditing] = useState<Workout | null>(null)
 
   const log = async (e: FormEvent) => {
     e.preventDefault()
@@ -127,12 +129,13 @@ export function GymWidget({ data, reload, actions }: WidgetProps<GymData>) {
                 {w.kind} · {w.minutes} min
                 <span className="muted small"> · {new Date(w.day + 'T12:00').toLocaleDateString([], { weekday: 'short' })}{w.note ? ` · ${w.note}` : ''}</span>
               </span>
+              <button className="icon-button" onClick={() => setEditing(w)} disabled={busy} aria-label={`Edit ${w.kind} workout`} title="Edit">✎</button>
               <button className="icon-button" onClick={() => remove(w.id)} disabled={busy} aria-label={`Delete ${w.kind} workout`} title="Delete">✕</button>
             </li>
           ))}
         </ul>
       )}
-
+      {editing && <EditWorkoutDialog workout={editing} kinds={data.kinds} onSaved={reload} onClose={() => setEditing(null)} />}
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { localDate, nutritionApi, type FoodResult, type NutrientValues, type SavedFood } from '../../api'
 import { Dialog } from '../../components/Dialog'
+import { EditSavedFoodDialog } from './EditSavedFoodDialog'
 import { FIELDS, fmt, per100g, scale, summary, toValues } from './nutrients'
 
 // What was picked in the search tab: a USDA food or one of "My foods"
@@ -23,6 +24,7 @@ export function AddFoodDialog({ day, personalKey, onAdded, onClose }: Props) {
 
   // "My foods" (foods entered by hand before)
   const [saved, setSaved] = useState<SavedFood[] | null>(null)
+  const [editingFood, setEditingFood] = useState<SavedFood | null>(null)
 
   // Search mode
   const [query, setQuery] = useState('')
@@ -159,6 +161,7 @@ export function AddFoodDialog({ day, personalKey, onAdded, onClose }: Props) {
                               {f.grams ? ` · usually ${fmt(f.grams)} g` : ''}
                             </span>
                           </button>
+                          <button type="button" className="icon-button" onClick={() => setEditingFood(f)} aria-label={`Edit ${f.name}`} title="Edit">✎</button>
                           <button type="button" className="icon-button" onClick={() => removeSaved(f)} aria-label={`Remove ${f.name} from My foods`} title="Remove from My foods">✕</button>
                         </li>
                       ))}
@@ -272,6 +275,10 @@ export function AddFoodDialog({ day, personalKey, onAdded, onClose }: Props) {
           </button>
         </div>
       </form>
+      {editingFood && (
+        <EditSavedFoodDialog food={editingFood} onClose={() => setEditingFood(null)}
+          onSaved={(food) => setSaved((list) => (list ?? []).map((f) => (f.id === food.id ? food : f)))} />
+      )}
     </Dialog>
   )
 }

@@ -24,11 +24,12 @@ AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
-# Read-only Gmail; Calendar: read the calendar list, read and change events (so Claude can
-# add/edit/delete events through the connector). Adding a scope here means signing in
+# Gmail: read, change labels/trash and write drafts/send (the last ones only for Claude, through
+# the connector); Calendar: read the calendar list, read and change events (Claude too). Adding a scope here means signing in
 # again once to grant it (and, for a new Google API, enabling that API in Google Cloud Console).
 SCOPE = " ".join([
-    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/gmail.compose",
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/calendar.events",
     "email",

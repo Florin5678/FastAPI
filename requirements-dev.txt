@@ -1,0 +1,4 @@
+# For running the tests locally and on GitHub Actions (not needed on Render)
+-r requirements.txt
+pytest
+httpx

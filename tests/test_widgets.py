@@ -1,0 +1,96 @@
+from datetime import date, datetime, timezone
+from unittest.mock import patch
+from zoneinfo import ZoneInfo
+
+import pytest
+from fastapi import HTTPException
+
+from app.widgets import budget, gym, notes, weight
+
+CPH = ZoneInfo("Europe/Copenhagen")
+
+
+def test_local_widgets_load(client):
+    for widget in ("nutrition", "notes", "gym", "weight", "budget"):
+        r = client.get(f"/widgets/{widget}/data", params={"tz": "Europe/Copenhagen"})
+        assert r.status_code == 200 and r.json()["status"] == "ok", (widget, r.text)
+
+
+# ---- Reminders ----
+
+def test_monthly_reminder_keeps_its_day_and_is_clamped_in_short_months(db, user):
+    with patch.object(notes, "_now", return_value=datetime(2026, 1, 30, 12, tzinfo=timezone.utc)):
+        r = notes.add_reminder(notes.ReminderIn(text="Rent", due=datetime(2026, 1, 31, 9, tzinfo=CPH), repeat="monthly",
+                                                tz="Europe/Copenhagen"), user=user, db=db)
+    dues = []
+    for _ in range(3):
+        with patch.object(notes, "_now", return_value=datetime.fromisoformat(r["due"])):
+            r = notes.update_reminder(r["id"], notes.ReminderPatch(done=True, tz="Europe/Copenhagen"), user=user, db=db)
+        dues.append(datetime.fromisoformat(r["due"]).astimezone(CPH).strftime("%d %b %H:%M"))
+    assert dues == ["28 Feb 09:00", "31 Mar 09:00", "30 Apr 09:00"]
+    assert r["done"] is False
+
+
+def test_repeating_reminder_needs_a_due_time(db, user):
+    with pytest.raises(HTTPException) as e:
+        notes.add_reminder(notes.ReminderIn(text="x", repeat="daily"), user=user, db=db)
+    assert e.value.status_code == 422
+
+
+def test_reminder_can_be_edited(client):
+    r = client.post("/widgets/notes/reminders", json={"text": "Laundry"}).json()
+    due = datetime(2030, 5, 1, 18, tzinfo=CPH).isoformat()
+    edited = client.patch(f"/widgets/notes/reminders/{r['id']}", json={"text": "Laundry + dishes", "due": due, "repeat": "weekly"}).json()
+    assert edited["text"] == "Laundry + dishes" and edited["repeat"] == "weekly"
+
+
+# ---- Budget ----
+
+def test_expense_sub_categories_are_fixed(db, user):
+    assert budget._check_categories(["expenses", "restaurant/café", "Wolt"]) == ["Expenses", "Restaurant/Café", "Wolt"]
+    assert budget._check_categories(["Income", "Anything", "Free text"]) == ["Income", "Anything", "Free text"]
+    for bad in (["Expenses", "Coffee"], ["Expenses"], ["Savings", "X"]):
+        with pytest.raises(HTTPException):
+            budget._check_categories(bad)
+
+
+def test_csv_import_skips_unknown_sub_categories(client):
+    csv = "Month,Category,Sub-category,Amount\n2026-10,Expenses,Groceries,10\n2026-10,Expenses,Coffee,5\n2026-10,Income,SU,100\n"
+    r = client.post("/widgets/budget/import", json={"csv": csv}).json()
+    assert r["imported"] == 2 and r["skipped"] == 1
+
+
+# ---- Gym ----
+
+def test_active_days_count_days_not_workouts(client):
+    today = date.today().isoformat()
+    for kind in ("Abs", "Legs"):
+        assert client.post("/widgets/gym/workouts", json={"day": today, "kind": kind, "minutes": 30}).status_code == 200
+    data = client.get("/widgets/gym/data", params={"tz": "Europe/Copenhagen"}).json()["data"]
+    assert data["active_days"] == 1 and data["workouts_done"] == 2
+    assert "weeks" not in data  # the tile's weekly chart was removed
+
+
+def test_workout_can_be_edited(client):
+    w = client.post("/widgets/gym/workouts", json={"day": date.today().isoformat(), "kind": "Abs", "minutes": 30}).json()
+    edited = client.patch(f"/widgets/gym/workouts/{w['id']}", json={"kind": "Legs", "minutes": 45, "note": "heavy"}).json()
+    assert (edited["kind"], edited["minutes"], edited["note"]) == ("Legs", 45, "heavy")
+    assert client.patch(f"/widgets/gym/workouts/{w['id']}", json={"kind": "Nope"}).status_code == 422
+
+
+def test_month_report_has_the_routine_order_for_colours(client):
+    report = client.get("/widgets/gym/month", params={"month": date.today().strftime("%Y-%m")}).json()
+    assert report["kinds"] == gym.load_routines()
+
+
+# ---- Weight ----
+
+def test_weight_change_is_measured_from_a_real_earlier_entry(db, user):
+    for d, kg in [("2026-08-20", 64.8), ("2026-09-02", 65.4), ("2026-09-26", 65.9), ("2026-10-01", 66.3)]:
+        weight.log_weight(db, user, date.fromisoformat(d), kg)
+    weight.log_weight(db, user, date(2026, 10, 1), 66.4)  # replaces that day's value
+    s = weight.summary(weight._entries(weight.widget_row(db, user, "weight")), date(2026, 10, 3), 70)
+    assert s["latest"] == {"day": "2026-10-01", "kg": 66.4}
+    assert s["change_week"] == {"kg": 1.0, "since": "2026-09-02"}
+    assert s["change_month"] == {"kg": 1.6, "since": "2026-08-20"}
+    assert s["to_goal"] == 3.6

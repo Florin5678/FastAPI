@@ -18,6 +18,7 @@ from app.connector import changes
 from app.connector.oauth import SCOPE, DashboardOAuthProvider, public_url
 from app.core.database import SessionLocal
 from app.core.timeutil import DASHBOARD_TZ
+from app.mail import gmail_actions
 from app.mail.routes import _email_dict
 from app.models import BudgetEntry, Email, NutritionEntry, User, Workout
 from app.widgets import REGISTRY, assistant, budget, google_calendar, gym, news, notes, nutrition, weather, weight
@@ -78,7 +79,12 @@ INSTRUCTIONS = (
     "log_saved_food for saved ones, update_food, delete_food), workouts (log_workout, update_workout, "
     "delete_workout), budget (add_budget_entry, update_budget_entry, delete_budget_entry, set_budget; expenses "
     "use a fixed list of sub-categories, see add_budget_entry), "
-    "and reminders (add_reminder, update_reminder, delete_reminder; they can repeat daily, weekly or monthly). "
+    "reminders (add_reminder, update_reminder, delete_reminder; they can repeat daily, weekly or monthly), "
+    "body weight (get_weight, log_weight, delete_weight) and My foods, the foods they log again and again "
+    "(list_saved_foods, add_saved_food, update_saved_food, delete_saved_food, log_saved_food). "
+    "Email: you can draft replies or new emails (draft_email), archive, mark read/unread and trash emails; "
+    "send_email sends for real and can't be undone, so only use it after the user has seen the exact text "
+    "and explicitly asked you to send it (otherwise make a draft). "
     "For meal suggestions use plan_meals. They keep a pantry and a shopping list (get_pantry returns both; "
     "add_pantry_items / add_shopping_items take one or many items in one call; move_to_pantry when bought, "
     "move_to_shopping_list when used up; set_pantry_priority stars items to use first). "
@@ -237,6 +243,73 @@ def get_email(email_id: int) -> dict:
         if data.get("full_body") and len(data["full_body"]) > MAX_EMAIL_BODY:
             data["full_body"] = data["full_body"][:MAX_EMAIL_BODY] + "\n[... cut off]"
         return data
+
+
+# ---- Email changes ----
+
+def _email_label(row: Email) -> str:
+    return f'"{(row.subject or "(no subject)")[:80]}" from {(row.sender or "?")[:60]}'
+
+
+@mcp.tool(annotations=WRITE)
+def draft_email(body: str, email_id: Optional[int] = None, to: Optional[str] = None, subject: Optional[str] = None) -> dict:
+    """Email: save a draft in the user's Gmail (nothing is sent). A reply when `email_id` is given (id from
+    list_emails; it goes to the sender, in the same thread, subject "Re: ..."), otherwise a new email (`to` and
+    `subject` needed). Write in the user's voice, plain text. The user can review and send it from Gmail.
+    Undoable (deletes the draft)."""
+    with _Call() as call:
+        message = _run(gmail_actions.compose, call.db, call.user, body, email_id, to, subject)
+        draft = _run(gmail_actions.create_draft, call.db, call.user, message)
+        call.record("draft_email", f'Drafted an email to {message["to"]}: "{message["subject"]}"',
+                    {"action": "delete_email_draft", "args": {"draft_id": draft["id"]}})
+        return {"draft_id": draft["id"], "to": message["to"], "subject": message["subject"], "saved_in": "Gmail drafts"}
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=True))
+def send_email(body: str, email_id: Optional[int] = None, to: Optional[str] = None, subject: Optional[str] = None) -> dict:
+    """Email: SEND an email from the user's Gmail - a reply when `email_id` is given (to the sender, same thread),
+    otherwise a new email (`to` and `subject` needed). It goes out immediately and CAN'T be undone: only call this
+    after showing the user the exact recipient, subject and text and getting an explicit "send it". When in
+    doubt, use draft_email instead."""
+    with _Call() as call:
+        message = _run(gmail_actions.compose, call.db, call.user, body, email_id, to, subject)
+        sent = _run(gmail_actions.send, call.db, call.user, message)
+        call.record("send_email", f'Sent an email to {message["to"]}: "{message["subject"]}" (can\'t be undone)', None)
+        return {"sent": True, "to": message["to"], "subject": message["subject"], "gmail_id": sent.get("id")}
+
+
+@mcp.tool(annotations=EDIT)
+def archive_email(email_id: int) -> str:
+    """Email: archive an email (take it out of the inbox; it stays in All Mail). Id from list_emails. Undoable."""
+    with _Call() as call:
+        row = _run(gmail_actions.stored_email, call.db, call.user, email_id)
+        _run(gmail_actions.change_labels, call.db, call.user, row.gmail_id, remove=["INBOX"])
+        call.record("archive_email", f"Archived {_email_label(row)}",
+                    {"action": "email_labels", "args": {"gmail_id": row.gmail_id, "add": ["INBOX"], "remove": []}})
+        return "Archived"
+
+
+@mcp.tool(annotations=EDIT)
+def mark_email_read(email_id: int, read: bool = True) -> str:
+    """Email: mark an email as read (read=true) or unread (false). Id from list_emails. Undoable."""
+    with _Call() as call:
+        row = _run(gmail_actions.stored_email, call.db, call.user, email_id)
+        add, remove = ([], ["UNREAD"]) if read else (["UNREAD"], [])
+        _run(gmail_actions.change_labels, call.db, call.user, row.gmail_id, add=add, remove=remove)
+        call.record("mark_email_read", f"Marked {'read' if read else 'unread'}: {_email_label(row)}",
+                    {"action": "email_labels", "args": {"gmail_id": row.gmail_id, "add": remove, "remove": add}})
+        return "Marked read" if read else "Marked unread"
+
+
+@mcp.tool(annotations=DELETE)
+def trash_email(email_id: int) -> str:
+    """Email: move an email to Gmail's trash (Gmail deletes it for good after 30 days). Id from list_emails.
+    Confirm with the user first. Undoable while it's in the trash."""
+    with _Call() as call:
+        row = _run(gmail_actions.stored_email, call.db, call.user, email_id)
+        _run(gmail_actions.trash, call.db, call.user, row.gmail_id)
+        call.record("trash_email", f"Moved to trash: {_email_label(row)}", {"action": "untrash_email", "args": {"gmail_id": row.gmail_id}})
+        return "Moved to trash"
 
 
 @mcp.tool(annotations=READ)

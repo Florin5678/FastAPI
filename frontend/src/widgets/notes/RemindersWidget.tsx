@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { notesApi, type Reminder, type Repeat } from '../../api'
 import type { WidgetProps } from '../types'
+import { EditReminderDialog } from './EditReminderDialog'
+import { repeatText } from './repeat'
 import './notes.css'
 
 export type RemindersData = { reminders: Reminder[]; done: Reminder[] }
@@ -20,23 +22,12 @@ function dueLabel(iso: string | null): { text: string; tone: string } | null {
   return { text: due.toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }), tone: 'later' }
 }
 
-// 1 -> "1st", 22 -> "22nd", 13 -> "13th"
-function ordinal(n: number): string {
-  const suffix = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th'
-  return `${n}${suffix}`
-}
-
-function repeatText(repeat: Repeat, day: number | null): string {
-  if (repeat === 'daily') return 'Every day'
-  if (repeat === 'weekly') return 'Every week'
-  return day ? `Every month on the ${ordinal(day)}` : 'Every month'
-}
-
 export function RemindersWidget({ data, reload }: WidgetProps<RemindersData>) {
   const [text, setText] = useState('')
   const [due, setDue] = useState('')
   const [repeat, setRepeat] = useState<Repeat | ''>('')
   const [showDone, setShowDone] = useState(false)
+  const [editing, setEditing] = useState<Reminder | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -89,6 +80,7 @@ export function RemindersWidget({ data, reload }: WidgetProps<RemindersData>) {
             </span>
           )}
         </span>
+        {!r.done && <button className="icon-button" disabled={busy} onClick={() => setEditing(r)} aria-label={`Edit "${r.text}"`} title="Edit">✎</button>}
         <button className="icon-button" disabled={busy} onClick={() => run(() => notesApi.deleteReminder(r.id))} aria-label={`Delete "${r.text}"`} title="Delete">✕</button>
       </li>
     )
@@ -122,6 +114,7 @@ export function RemindersWidget({ data, reload }: WidgetProps<RemindersData>) {
         <ul className="reminder-list">{data.reminders.map(row)}</ul>
       )}
 
+      {editing && <EditReminderDialog reminder={editing} onSaved={reload} onClose={() => setEditing(null)} />}
       {data.done.length > 0 && (
         <>
           <button className="link" onClick={() => setShowDone(!showDone)}>

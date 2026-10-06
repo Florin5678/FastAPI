@@ -78,6 +78,8 @@ export const nutritionApi = {
     request<FoodEntry>(`/widgets/nutrition/entries/${id}`, { method: 'PATCH', ...json(changes) }),
   savedFoods: () => request<{ foods: SavedFood[] }>('/widgets/nutrition/saved-foods'),
   deleteSavedFood: (id: string) => request<unknown>(`/widgets/nutrition/saved-foods/${id}`, { method: 'DELETE' }),
+  updateSavedFood: (id: string, changes: { name?: string; grams?: number | null; per_100g?: NutrientValues }) =>
+    request<SavedFood>(`/widgets/nutrition/saved-foods/${id}`, { method: 'PATCH', ...json(changes) }),
   deleteEntry: (id: number) => request<unknown>(`/widgets/nutrition/entries/${id}`, { method: 'DELETE' }),
   getDay: (day: string) => request<NutritionDayData>(`/widgets/nutrition/days/${day}`),
   history: (end: string, days: number) => request<NutritionHistory>(`/widgets/nutrition/history?end=${end}&days=${days}`),

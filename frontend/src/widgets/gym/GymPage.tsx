@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { gymApi, localDate, type GymMonth } from '../../api'
+import { gymApi, localDate, type GymMonth, type Workout } from '../../api'
 import { seriesSlot } from './colors'
+import { EditWorkoutDialog } from './EditWorkoutDialog'
 import { GymChart } from './GymChart'
 import './gym.css'
 import { monthTitle, shiftMonth } from '../../lib/dates'
@@ -15,6 +16,8 @@ export function GymPage() {
   const [month, setMonth] = useState(thisMonth)
   const [report, setReport] = useState<{ month: string; data?: GymMonth; error?: string } | null>(null)
   const [selected, setSelected] = useState<string | null>(null) // tapped day, shown under the calendar
+  const [editing, setEditing] = useState<Workout | null>(null)
+  const [version, setVersion] = useState(0) // bumped after an edit, to reload
 
   useEffect(() => {
     let cancelled = false
@@ -22,7 +25,7 @@ export function GymPage() {
       .then((data) => { if (!cancelled) setReport({ month, data }) })
       .catch((err) => { if (!cancelled) setReport({ month, error: (err as Error).message }) })
     return () => { cancelled = true }
-  }, [month])
+  }, [month, version])
 
   const current = report?.month === month ? report : null
   const data = current?.data
@@ -90,6 +93,7 @@ export function GymPage() {
                       {w.kind} · {duration(w.minutes)}
                       {w.note && <span className="muted small"> · {w.note}</span>}
                     </span>
+                    <button className="icon-button" onClick={() => setEditing(w)} aria-label={`Edit ${w.kind} workout`} title="Edit">✎</button>
                   </li>
                 ))}
               </ul>
@@ -133,6 +137,9 @@ export function GymPage() {
           </div>
           <GymChart />
         </>
+      )}
+      {editing && data && (
+        <EditWorkoutDialog workout={editing} kinds={data.kinds} onSaved={() => setVersion((v) => v + 1)} onClose={() => setEditing(null)} />
       )}
     </section>
   )
