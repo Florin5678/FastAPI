@@ -516,9 +516,50 @@ def update_food(entry_id: int, grams: Optional[float] = None, name: Optional[str
 @mcp.tool(annotations=READ)
 def list_saved_foods() -> dict:
     """The user's saved foods ("My foods"), most recently used first, with values per 100 g and the usual
-    amount in grams. Use log_saved_food to log one again."""
+    amount in grams. Use log_saved_food to log one again, update_saved_food to correct one."""
     with _Call() as call:
         return _run(nutrition.list_saved_foods, user=call.user, db=call.db)
+
+
+def _find_saved_food(call: _Call, food: str) -> dict:
+    foods = _run(nutrition.list_saved_foods, user=call.user, db=call.db)["foods"]
+    wanted = food.strip().lower()
+    match = [f for f in foods if f["id"] == food or f["name"].lower() == wanted] or [f for f in foods if wanted in f["name"].lower()]
+    if len(match) != 1:
+        names = ", ".join(f["name"] for f in (match or foods)[:15])
+        raise ToolError(f"{'Several' if match else 'No'} saved foods match '{food}'. Saved foods: {names or 'none yet'}")
+    return match[0]
+
+
+@mcp.tool(annotations=EDIT)
+def update_saved_food(food: str, name: Optional[str] = None, grams: Optional[float] = None,
+                      calories: Optional[float] = None, protein: Optional[float] = None, carbs: Optional[float] = None,
+                      fat: Optional[float] = None, fiber: Optional[float] = None, sugar: Optional[float] = None,
+                      sat_fat: Optional[float] = None, salt: Optional[float] = None) -> dict:
+    """Nutrition: edit a saved food ("My foods"; `food` = its name or id from list_saved_foods). Nutrient values
+    are PER 100 g (only the ones given change; e.g. fill in a missing salt value); `grams` is the usual amount
+    eaten; `name` renames it. Doesn't change food already logged. Undoable."""
+    with _Call() as call:
+        saved = _find_saved_food(call, food)
+        per_100g = {k: v for k, v in zip(NUTRIENT_KEYS, (calories, protein, carbs, fat, fiber, sugar, sat_fat, salt), strict=True)
+                    if v is not None}
+        changes: dict[str, Any] = {"name": name, "per_100g": per_100g}
+        if grams is not None:
+            changes["grams"] = grams
+        updated, before = _run(nutrition.update_saved_food, call.db, call.user, saved["id"], changes)
+        call.record("update_saved_food", f'Changed {before["name"]} in My foods', {"action": "restore_saved_food", "args": {"food": before}})
+        return updated
+
+
+@mcp.tool(annotations=DELETE)
+def delete_saved_food(food: str) -> str:
+    """Nutrition: remove a saved food from "My foods" (`food` = its name or id). Food already logged stays.
+    Undoable."""
+    with _Call() as call:
+        saved = _find_saved_food(call, food)
+        _run(nutrition.delete_saved_food, saved["id"], user=call.user, db=call.db)
+        call.record("delete_saved_food", f'Removed {saved["name"]} from My foods', {"action": "restore_saved_food", "args": {"food": saved}})
+        return "Deleted"
 
 
 @mcp.tool(annotations=WRITE)
@@ -526,13 +567,7 @@ def log_saved_food(food: str, grams: Optional[float] = None, day: Optional[str] 
     """Nutrition: add a saved food ("My foods") to the food log again. `food`: its name (or id) from list_saved_foods; `grams`:
     the amount eaten (default: the amount used last time, else 100 g); `day` default today."""
     with _Call() as call:
-        foods = _run(nutrition.list_saved_foods, user=call.user, db=call.db)["foods"]
-        wanted = food.strip().lower()
-        match = [f for f in foods if f["id"] == food or f["name"].lower() == wanted] or [f for f in foods if wanted in f["name"].lower()]
-        if len(match) != 1:
-            names = ", ".join(f["name"] for f in (match or foods)[:15])
-            raise ToolError(f"{'Several' if match else 'No'} saved foods match '{food}'. Saved foods: {names or 'none yet'}")
-        saved = match[0]
+        saved = _find_saved_food(call, food)
         amount = grams or saved.get("grams") or 100
         nutrients = {k: round(saved["per_100g"].get(k, 0) * amount / 100, 1) for k in NUTRIENT_KEYS}
         entry = _run(nutrition.add_entry, nutrition.EntryIn(

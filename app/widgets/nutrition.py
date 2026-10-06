@@ -35,7 +35,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.timeutil import local_today
+from app.core.timeutil import DASHBOARD_TZ, local_today, local_zone
 from app.core.database import get_db
 from app.models import NutritionDay, NutritionEntry, User
 from app.core.security import get_current_user
@@ -138,26 +138,51 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     today = local_today(ctx.tz)
     yesterday = day_summary(db, user, today - timedelta(days=1))
     # Yesterday is only for the Assistant briefing (see brief())
-    return {**day_summary(db, user, today), "yesterday": {"nutrients": yesterday["nutrients"], "entries": yesterday["entries"]}}
+    return {**day_summary(db, user, today),
+            "yesterday": {"day": yesterday["day"], "nutrients": yesterday["nutrients"], "entries": yesterday["entries"]}}
 
 
-def _brief_day(day: dict, limit: int | None) -> tuple[str, str]:
-    """("Calories 1450/2900 kcal; ...", "food, food, ...") for one day."""
-    parts = [f"{n['label']} {round(n['actual'])}/{round(n['goal'])} {n['unit']}" + (" (limit)" if n["kind"] == "limit" else "")
-             for n in day["nutrients"]]
-    return "; ".join(parts), ", ".join(e["name"] for e in day["entries"][:limit or 8])
+def _brief_nutrients(day: dict) -> list[str]:
+    """One line per nutrient: intake vs goal, % and what's left (or how far over a limit)."""
+    lines = []
+    for n in day["nutrients"]:
+        actual, goal, unit = n["actual"], n["goal"], n["unit"]
+        line = f"- {n['label']}: {actual:g} / {goal:g} {unit}"
+        if n["kind"] == "limit":
+            line += f" (limit; {goal - actual:g} {unit} left)" if actual <= goal else f" (limit; OVER by {actual - goal:g} {unit})"
+        elif goal:
+            line += f" ({round(100 * actual / goal)}%; " + (f"{goal - actual:g} {unit} to go)" if actual < goal else "goal reached)")
+        lines.append(line)
+    return lines
+
+
+def _brief_foods(day: dict) -> list[str]:
+    """Every food logged that day, in order, with when it was logged and its main values."""
+    zone = local_zone(DASHBOARD_TZ)
+    lines = []
+    for e in reversed(day["entries"]):  # day_summary lists newest first
+        when = datetime.fromisoformat(e["added_at"].replace("Z", "+00:00")).astimezone(zone).strftime("%H:%M") if e.get("added_at") else "?"
+        n = e["nutrients"]
+        amount = f" ({e['grams']:g} g)" if e.get("grams") else ""
+        lines.append(f"- {when} {e['name']}{amount}: {n['calories']:g} kcal, protein {n['protein']:g} g, carbs {n['carbs']:g} g, "
+                     f"fat {n['fat']:g} g, fiber {n['fiber']:g} g, sugar {n['sugar']:g} g, salt {n.get('salt', 0):g} g")
+    return lines
 
 
 def brief(data: dict, limit: int | None = None) -> str:
-    totals, foods = _brief_day(data, limit)
-    text = f"Today's intake vs goals: {totals}. Foods: {foods or 'nothing logged yet'}."
-    yesterday = data.get("yesterday")
-    if yesterday and yesterday["entries"]:
-        totals, foods = _brief_day(yesterday, limit)
-        text += f"\nYesterday's intake vs goals: {totals}. Foods: {foods}."
-    elif yesterday is not None:
-        text += "\nYesterday: nothing logged."
-    return text
+    """Today and yesterday: every nutrient vs its goal, and every food logged (times are when it was logged)."""
+    parts = []
+    for label, day in (("Today", data), ("Yesterday", data.get("yesterday"))):
+        if day is None:
+            continue
+        parts.append(f"{label} ({day.get('day', '')}) - intake vs goals:")
+        parts += _brief_nutrients(day)
+        if day["entries"]:
+            parts.append(f"{label} - food logged ({len(day['entries'])} items, time logged):")
+            parts += _brief_foods(day)
+        else:
+            parts.append(f"{label} - no food logged.")
+    return "\n".join(parts)
 
 
 register(WidgetDefinition(
@@ -405,6 +430,33 @@ def update_entry(entry_id: int, body: EntryPatch, user: User = Depends(get_curre
     db.commit()
     db.refresh(entry)
     return _entry_dict(entry)
+
+
+def update_saved_food(db: Session, user: User, food_id: str, changes: dict) -> tuple[dict, dict]:
+    """Change a saved food: `name`, `grams` (usual amount) and/or values in `per_100g` (only the
+    ones given). Returns (food, its previous version)."""
+    row = widget_row(db, user, WIDGET_ID)
+    foods = _saved_foods(row)
+    food = next((f for f in foods if f["id"] == food_id), None)
+    if food is None:
+        raise HTTPException(status_code=404, detail="Saved food not found")
+    before = {**food, "per_100g": dict(food.get("per_100g") or {})}
+    if changes.get("name"):
+        food["name"] = changes["name"].strip()
+    if "grams" in changes:
+        food["grams"] = changes["grams"]
+    food["per_100g"] = {**(food.get("per_100g") or {}),
+                        **{k: round(float(v), 2) for k, v in (changes.get("per_100g") or {}).items()}}
+    _store_saved_foods(row, foods)
+    db.commit()
+    return food, before
+
+
+def restore_saved_food(db: Session, user: User, food: dict) -> None:
+    """Put a saved food back exactly as it was (same id): undo of an edit or a delete."""
+    row = widget_row(db, user, WIDGET_ID)
+    _store_saved_foods(row, [f for f in _saved_foods(row) if f["id"] != food["id"]] + [food])
+    db.commit()
 
 
 @router.get("/saved-foods")

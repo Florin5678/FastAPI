@@ -80,6 +80,7 @@ UNDO_ACTIONS: dict[str, Any] = {
     "readd_food": lambda db, user, a: _readd_food(db, user, a["entry"]),
     "delete_pantry_item": lambda db, user, a: nutrition.delete_pantry_item(a["id"], user=user, db=db),
     "restore_pantry_item": lambda db, user, a: _restore_pantry_item(db, user, a["item"]),
+    "restore_saved_food": lambda db, user, a: nutrition.restore_saved_food(db, user, a["food"]),
     "restore_lists": lambda db, user, a: nutrition.restore_lists(db, user, a["undo"]),
     "delete_calendar_event": lambda db, user, a: google_calendar.delete_event(db, user, a["calendar_id"], a["event_id"]),
     "restore_calendar_event": lambda db, user, a: google_calendar.update_event(db, user, a["calendar_id"], a["event_id"], a["body"]),
