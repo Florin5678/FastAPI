@@ -739,8 +739,8 @@ def _record_lists(call: _Call, tool: str, summary: str, undo: dict) -> None:
 
 @mcp.tool(annotations=READ, description=(
     "Pantry & shopping list: `items` is the food the user has at home (id, name, amount, best-before `expires`, "
-    "`priority` = starred to use first), `shopping` is their shopping list (id, name, amount, note); both "
-    "alphabetical.\n\n" + MEAL_GUIDE))
+    "`priority` = starred to use first; starred items come first, then alphabetical), `shopping` is their "
+    "shopping list (id, name, amount, note), alphabetical.\n\n" + MEAL_GUIDE))
 def get_pantry() -> dict:
     with _Call() as call:
         return _run(nutrition.list_pantry, user=call.user, db=call.db)

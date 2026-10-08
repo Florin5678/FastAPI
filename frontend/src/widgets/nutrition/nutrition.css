@@ -48,7 +48,11 @@
 .food-basis .segmented button { font-size: 13px; padding: 5px 10px; }
 
 /* Pantry (PantryDialog.tsx) */
-.nutrition-head-actions { display: flex; gap: 6px; }
+.nutrition-head .link, .nutrition-head .button { white-space: nowrap; }
+.nutrition-lists { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0 12px; }
+.nutrition-lists .button { white-space: nowrap; }
+.nutrition-count { margin-left: 6px; min-width: 18px; padding: 0 5px; border-radius: 999px; background: var(--accent);
+  color: var(--accent-text); font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; }
 .pantry-intro { margin: 0 0 10px; }
 .pantry-form { display: grid; grid-template-columns: 1fr 9em; gap: 8px; align-items: end; }
 .pantry-form input { width: 100%; min-width: 0; height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border);

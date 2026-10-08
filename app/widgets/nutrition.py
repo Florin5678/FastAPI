@@ -139,6 +139,7 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     yesterday = day_summary(db, user, today - timedelta(days=1))
     # Yesterday is only for the Assistant briefing (see brief())
     return {**day_summary(db, user, today),
+            "shopping_count": len((widget_row(db, user, WIDGET_ID).config or {}).get("shopping", [])),
             "yesterday": {"day": yesterday["day"], "nutrients": yesterday["nutrients"], "entries": yesterday["entries"]}}
 
 
@@ -602,14 +603,19 @@ class ShoppingItemPatch(BaseModel):
     note: Optional[str] = Field(None, max_length=200)
 
 
+def _order(item: dict) -> tuple:
+    """List order: ★ priority pantry items pinned at the top, then alphabetical."""
+    return (not item.get("priority"), item["name"].lower())
+
+
 def _items(row, kind: str) -> list[dict]:
-    return [dict(i) for i in (row.config or {}).get(kind, [])]
+    return sorted((dict(i) for i in (row.config or {}).get(kind, [])), key=_order)
 
 
 def _store(row, kind: str, items: list[dict]) -> list[dict]:
     if len(items) > MAX_PANTRY_ITEMS:
         raise HTTPException(status_code=422, detail=f"A list holds up to {MAX_PANTRY_ITEMS} items")
-    items.sort(key=lambda i: i["name"].lower())  # alphabetical
+    items.sort(key=_order)
     row.config = {**(row.config or {}), kind: items}  # JSON columns aren't mutation-tracked
     return items
 

@@ -86,3 +86,16 @@ def test_my_foods_add_update_delete_and_ui_patch(db, user, client, claude):
     assert r.status_code == 200 and r.json()["name"] == "Kohberg rugbrød" and r.json()["grams"] == 41
     tools.delete_saved_food("kohberg")
     assert client.get("/widgets/nutrition/saved-foods").json()["foods"] == []
+
+
+def test_starred_pantry_items_are_pinned_at_the_top(client):
+    ids = {name: client.post("/widgets/nutrition/pantry", json={"name": name}).json()["id"] for name in ("Apples", "Rice", "Beans")}
+    client.patch(f"/widgets/nutrition/pantry/{ids['Rice']}", json={"priority": True})
+    assert [i["name"] for i in client.get("/widgets/nutrition/pantry").json()["items"]] == ["Rice", "Apples", "Beans"]
+
+
+def test_nutrition_tile_counts_the_shopping_list(client):
+    for name in ("Milk", "Eggs"):
+        client.post("/widgets/nutrition/shopping", json={"name": name})
+    data = client.get("/widgets/nutrition/data", params={"tz": "Europe/Copenhagen"}).json()["data"]
+    assert data["shopping_count"] == 2

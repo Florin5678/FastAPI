@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { localDate, nutritionApi, type PantryItem, type ShoppingItem } from '../../api'
 import { Dialog } from '../../components/Dialog'
 
-type Tab = 'pantry' | 'shopping'
+export type PantryTab = 'pantry' | 'shopping'
 type Draft = { name: string; amount: string; expires: string | null }
 const EMPTY: Draft = { name: '', amount: '', expires: null }
 
@@ -16,11 +16,11 @@ function expiryLabel(expires: string | null): { text: string; tone: string } | n
   return { text: `Best before ${new Date(expires + 'T12:00').toLocaleDateString([], { day: 'numeric', month: 'short' })}`, tone: '' }
 }
 
-// The food at home and the shopping list. Pantry items can be starred (★ use first: close to
-// expiring, opened cans...), which meal plans prioritise. Kept out of the briefing; Claude reads
-// and changes both lists through the connector.
-export function PantryDialog({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<Tab>('pantry')
+// The food at home and the shopping list (the Nutrition tile opens either tab). Pantry items can be
+// starred (★ use first: close to expiring, opened cans...), which pins them at the top and meal
+// plans prioritise. Kept out of the briefing; Claude reads and changes both lists through the connector.
+export function PantryDialog({ initialTab = 'pantry', onClose }: { initialTab?: PantryTab; onClose: () => void }) {
+  const [tab, setTab] = useState<PantryTab>(initialTab)
   const [pantry, setPantry] = useState<PantryItem[] | null>(null)
   const [shopping, setShopping] = useState<ShoppingItem[]>([])
   const [draft, setDraft] = useState<Draft>(EMPTY)
@@ -53,7 +53,7 @@ export function PantryDialog({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const switchTab = (next: Tab) => { setTab(next); setEditing(null); setDraft(EMPTY) }
+  const switchTab = (next: PantryTab) => { setTab(next); setEditing(null); setDraft(EMPTY) }
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -76,7 +76,7 @@ export function PantryDialog({ onClose }: { onClose: () => void }) {
   const starred = (pantry ?? []).filter((i) => i.priority).length
 
   return (
-    <Dialog title="Pantry" onClose={onClose}>
+    <Dialog title={tab === 'shopping' ? 'Shopping list' : 'Pantry'} onClose={onClose}>
       <div className="segmented plain" role="tablist">
         <button type="button" role="tab" aria-selected={tab === 'pantry'} className={tab === 'pantry' ? 'active' : ''} onClick={() => switchTab('pantry')}>
           Pantry{pantry && pantry.length > 0 && ` (${pantry.length})`}
@@ -87,7 +87,7 @@ export function PantryDialog({ onClose }: { onClose: () => void }) {
       </div>
       <p className="muted small pantry-intro">
         {tab === 'pantry'
-          ? <>Food you have at home. ★ marks items to use first{starred > 0 && ` (${starred} starred)`}: meal plans include them where they fit. Not part of your briefing.</>
+          ? <>Food you have at home. ★ marks items to use first{starred > 0 && ` (${starred} starred)`}: they stay at the top and meal plans include them where they fit. Not part of your briefing.</>
           : <>What you plan to buy. ✓ moves an item to the pantry once bought.</>}
       </p>
 
