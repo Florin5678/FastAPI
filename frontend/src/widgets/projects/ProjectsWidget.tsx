@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
-import { projectsApi, projectsOrderApi, type Project, type ProjectsData, type ProjectTask } from '../../api'
+import { projectsApi, projectsOrderApi, type Project, type ProjectColor, type ProjectsData, type ProjectTask } from '../../api'
 import type { WidgetProps } from '../types'
+import { ColorPicker } from './ColorPicker'
 import { deadlineLabel } from './deadline'
 import { moved } from './order'
 import { ProjectDialog } from './ProjectDialog'
@@ -29,6 +30,7 @@ function saveCollapsed(ids: string[]) {
 export function ProjectsWidget({ data, reload }: WidgetProps<ProjectsData>) {
   const [newName, setNewName] = useState('')
   const [newDeadline, setNewDeadline] = useState('')
+  const [newColor, setNewColor] = useState<ProjectColor | null>(null)
   const [adding, setAdding] = useState(false)
   const [collapsed, setCollapsed] = useState<string[]>(loadCollapsed)
   const [showCompleted, setShowCompleted] = useState(false)
@@ -62,9 +64,10 @@ export function ProjectsWidget({ data, reload }: WidgetProps<ProjectsData>) {
   const addProject = async (e: FormEvent) => {
     e.preventDefault()
     if (!newName.trim()) return
-    if (await run(() => projectsApi.addProject(newName.trim(), newDeadline || null))) {
+    if (await run(() => projectsApi.addProject(newName.trim(), newDeadline || null, newColor))) {
       setNewName('')
       setNewDeadline('')
+      setNewColor(null)
       setAdding(false)
     }
   }
@@ -105,9 +108,10 @@ export function ProjectsWidget({ data, reload }: WidgetProps<ProjectsData>) {
         <form className="projects-add" onSubmit={addProject}>
           <input type="text" placeholder="Project name" value={newName} maxLength={120} autoFocus aria-label="Project name"
             onChange={(e) => setNewName(e.target.value)} />
+          <ColorPicker value={newColor} onChange={setNewColor} />
           <div className="projects-add-row">
             <input type="date" value={newDeadline} onChange={(e) => setNewDeadline(e.target.value)} aria-label="Deadline (optional)" title="Deadline (optional)" />
-            <button type="button" className="button ghost small-button" onClick={() => { setAdding(false); setNewName(''); setNewDeadline('') }}>Cancel</button>
+            <button type="button" className="button ghost small-button" onClick={() => { setAdding(false); setNewName(''); setNewDeadline(''); setNewColor(null) }}>Cancel</button>
             <button type="submit" className="button primary small-button" disabled={busy || !newName.trim()}>Add</button>
           </div>
         </form>
@@ -190,7 +194,7 @@ function ProjectCard({ project, today, open, busy, run, onToggle, onEdit, onOpen
   }
 
   return (
-    <section className={project.done ? 'project done' : 'project'}>
+    <section className={`project${project.done ? ' done' : ''}${project.color ? ` project-color-${project.color}` : ''}`}>
       <div className="project-head">
         <input type="checkbox" checked={project.done} disabled={busy}
           aria-label={project.done ? `Reopen project "${project.name}"` : `Mark project "${project.name}" as completed`}

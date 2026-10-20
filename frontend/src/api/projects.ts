@@ -18,10 +18,15 @@ export type ProjectTask = {
   comments: ProjectComment[] // oldest first
 }
 
+// A project's background tint (projects.css maps each to a light and a dark shade)
+export const PROJECT_COLORS = ['blue', 'teal', 'green', 'yellow', 'orange', 'red', 'pink', 'purple', 'gray'] as const
+export type ProjectColor = (typeof PROJECT_COLORS)[number]
+
 export type Project = {
   id: string
   name: string
   deadline: string | null
+  color?: ProjectColor | null // none: the tile's own background
   done: boolean
   done_at: string | null
   created_at: string
@@ -38,9 +43,9 @@ export type ProjectsData = {
 const base = '/widgets/projects'
 
 export const projectsApi = {
-  addProject: (name: string, deadline: string | null) =>
-    request<Project>(`${base}/projects`, { method: 'POST', ...json({ name, deadline }) }),
-  updateProject: (id: string, changes: Partial<Pick<Project, 'name' | 'deadline' | 'done'>>) =>
+  addProject: (name: string, deadline: string | null, color: ProjectColor | null) =>
+    request<Project>(`${base}/projects`, { method: 'POST', ...json({ name, deadline, color }) }),
+  updateProject: (id: string, changes: Partial<Pick<Project, 'name' | 'deadline' | 'color' | 'done'>>) =>
     request<Project>(`${base}/projects/${id}`, { method: 'PATCH', ...json(changes) }),
   deleteProject: (id: string) => request<unknown>(`${base}/projects/${id}`, { method: 'DELETE' }),
   addTask: (projectId: string, title: string, deadline: string | null) =>

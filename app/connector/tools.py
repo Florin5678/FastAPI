@@ -544,18 +544,21 @@ def get_projects(include_completed: bool = False) -> dict:
 
 
 @mcp.tool(annotations=WRITE)
-def add_project(name: str, deadline: Optional[str] = None) -> dict:
-    """Projects: add a NEW project. `deadline`: optional date like 2026-11-15. Add its tasks with add_task."""
+def add_project(name: str, deadline: Optional[str] = None, color: Optional[projects.Color] = None) -> dict:
+    """Projects: add a NEW project. `deadline`: optional date like 2026-11-15. `color`: optional background colour
+    for the project on the dashboard. Add its tasks with add_task."""
     with _Call() as call:
-        project = _run(projects.add_project, projects.ProjectIn(name=name, deadline=_deadline(deadline)), user=call.user, db=call.db)
+        project = _run(projects.add_project, projects.ProjectIn(name=name, deadline=_deadline(deadline), color=color),
+                       user=call.user, db=call.db)
         call.record("add_project", f"Added project {_project_label(project)}", {"action": "delete_project", "args": {"id": project["id"]}})
         return project
 
 
 @mcp.tool(annotations=EDIT)
 def update_project(project_id: str, name: Optional[str] = None, deadline: Optional[str] = None,
-                   clear_deadline: bool = False, done: Optional[bool] = None) -> dict:
-    """Projects: rename a project, change its deadline (date like 2026-11-15, or clear_deadline=true), or mark it
+                   clear_deadline: bool = False, color: Optional[str] = None, done: Optional[bool] = None) -> dict:
+    """Projects: rename a project, change its deadline (date like 2026-11-15, or clear_deadline=true), its
+    background colour (`color`: blue, teal, green, yellow, orange, red, pink, purple, gray, or "none"), or mark it
     completed (done=true) / not completed (done=false). Its tasks are kept as they are."""
     with _Call() as call:
         before = _run(projects.project_of, call.db, call.user, project_id=project_id)
@@ -565,6 +568,8 @@ def update_project(project_id: str, name: Optional[str] = None, deadline: Option
             fields["name"] = name
         if deadline is not None or clear_deadline:
             fields["deadline"] = None if clear_deadline else _deadline(deadline)
+        if color is not None:
+            fields["color"] = None if color == "none" else color
         if done is not None:
             fields["done"] = done
         project = _run(projects.update_project, project_id, projects.ProjectPatch(**fields), user=call.user, db=call.db)

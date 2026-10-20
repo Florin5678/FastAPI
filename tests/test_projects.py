@@ -133,3 +133,13 @@ def test_claude_can_reorder_and_undo_restores_the_order(claude, db, user):
     claude.undo_last(db, user)  # back in its old place, tasks in the user's order
     first = tools.get_projects()["projects"][0]
     assert first["name"] == "A" and [t["title"] for t in first["tasks"]] == ["two", "one"]
+
+
+def test_projects_have_an_optional_colour(client, claude):
+    p = client.post("/widgets/projects/projects", json={"name": "Garden", "color": "green"}).json()
+    assert p["color"] == "green"
+    assert client.patch(f"/widgets/projects/projects/{p['id']}", json={"color": "magenta"}).status_code == 422
+    assert client.patch(f"/widgets/projects/projects/{p['id']}", json={"color": None}).json()["color"] is None
+    assert tools.update_project(p["id"], color="purple")["color"] == "purple"
+    assert tools.update_project(p["id"], color="none")["color"] is None
+    assert tools.add_project("Blog", color="blue")["color"] == "blue"

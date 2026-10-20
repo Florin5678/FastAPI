@@ -1,7 +1,7 @@
 # Projects widget: a project tracker. Projects hold tasks; tasks hold comments. Both
 # projects and tasks have an optional deadline (a local date) and can be marked completed.
 # Everything is stored in the widget's integrations row:
-#   config["projects"] = [{id, name, deadline, done, done_at, created_at,
+#   config["projects"] = [{id, name, deadline, color, done, done_at, created_at,
 #                          tasks: [{id, title, deadline, done, done_at, created_at,
 #                                   comments: [{id, text, created_at, edited_at}]}]}]
 # Projects and tasks are kept in the user's order (the list order). New ones, and ones whose
@@ -9,7 +9,7 @@
 # and a list can be sorted by date again. Claude edits the same data through the connector.
 import uuid
 from datetime import date, datetime, timedelta, timezone
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -26,6 +26,8 @@ MAX_PROJECTS = 100
 MAX_TASKS = 300  # per project
 MAX_COMMENTS = 100  # per task
 SOON_DAYS = 7  # the briefing lists tasks due within this many days (and overdue ones)
+# A project's background tint (the frontend maps each to a light and a dark shade)
+Color = Literal["blue", "teal", "green", "yellow", "orange", "red", "pink", "purple", "gray"]
 
 
 def _now() -> str:
@@ -201,11 +203,13 @@ router = APIRouter(prefix=f"/widgets/{WIDGET_ID}", tags=["widgets"])
 class ProjectIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     deadline: Optional[date] = None
+    color: Optional[Color] = None  # none = the tile's own background
 
 
 class ProjectPatch(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=120)
     deadline: Optional[date] = None  # send null to clear
+    color: Optional[Color] = None  # send null for no colour
     done: Optional[bool] = None
 
 
@@ -263,7 +267,7 @@ def add_project(body: ProjectIn, user: User = Depends(get_current_user), db: Ses
     if len(projects) >= MAX_PROJECTS:
         raise HTTPException(status_code=422, detail=f"You can keep up to {MAX_PROJECTS} projects; delete some old ones first")
     project = {"id": _new_id(), "name": _text(body.name, "project name"), "deadline": _deadline(body.deadline),
-               "done": False, "done_at": None, "created_at": _now(), "tasks": []}
+               "color": body.color, "done": False, "done_at": None, "created_at": _now(), "tasks": []}
     _place(projects, project)
     _commit(db, row, projects)
     return project
@@ -278,6 +282,8 @@ def update_project(project_id: str, body: ProjectPatch, user: User = Depends(get
     if "deadline" in body.model_fields_set and project["deadline"] != _deadline(body.deadline):
         project["deadline"] = _deadline(body.deadline)
         _place(projects, project)
+    if "color" in body.model_fields_set:
+        project["color"] = body.color
     if body.done is not None:
         _set_done(project, body.done)
     _commit(db, row, projects)

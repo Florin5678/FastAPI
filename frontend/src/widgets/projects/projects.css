@@ -19,6 +19,38 @@
 
 .project { border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
 .project.done { opacity: 0.75; }
+.project[class*="project-color-"] { background: var(--project-bg); border-color: var(--project-border); }
+.project[class*="project-color-"] .task + .task { border-top-color: var(--project-border); }
+.project[class*="project-color-"] .project-bar { background: var(--project-border); }
+.project[class*="project-color-"] input[type="text"], .project[class*="project-color-"] input[type="date"] { border-color: var(--project-border); }
+
+/* Project colours: soft tints that keep text readable (light / dark); the swatch is a clearer shade */
+.project-color-blue { --project-bg: #e9f1fd; --project-border: #bcd4f6; --project-swatch: #5b8fe0; }
+.project-color-teal { --project-bg: #e3f5f3; --project-border: #a8dcd5; --project-swatch: #3fa99c; }
+.project-color-green { --project-bg: #e8f5e6; --project-border: #b5dbb0; --project-swatch: #5bab57; }
+.project-color-yellow { --project-bg: #fcf5d9; --project-border: #ead786; --project-swatch: #d9b52e; }
+.project-color-orange { --project-bg: #fdeedf; --project-border: #f2c79c; --project-swatch: #e88b3c; }
+.project-color-red { --project-bg: #fce9e8; --project-border: #f0b8b5; --project-swatch: #de6058; }
+.project-color-pink { --project-bg: #fbe9f3; --project-border: #ecb9d6; --project-swatch: #d870aa; }
+.project-color-purple { --project-bg: #efebfc; --project-border: #cbc0f2; --project-swatch: #8a74e0; }
+.project-color-gray { --project-bg: #f0f1f4; --project-border: #d2d5dd; --project-swatch: #8d93a1; }
+@media (prefers-color-scheme: dark) {
+  .project-color-blue { --project-bg: #19263a; --project-border: #2c4669; }
+  .project-color-teal { --project-bg: #142e2c; --project-border: #23534d; }
+  .project-color-green { --project-bg: #182d1c; --project-border: #2b5133; }
+  .project-color-yellow { --project-bg: #2f2a14; --project-border: #5a4e22; }
+  .project-color-orange { --project-bg: #33241a; --project-border: #624329; }
+  .project-color-red { --project-bg: #351b1d; --project-border: #652f33; }
+  .project-color-pink { --project-bg: #33192a; --project-border: #612e4c; }
+  .project-color-purple { --project-bg: #241f3d; --project-border: #44396f; }
+  .project-color-gray { --project-bg: #22242c; --project-border: #3b3e4b; }
+}
+
+.color-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+.swatch { width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--border);
+  background: var(--project-swatch, var(--surface)); cursor: pointer; }
+.swatch.none { background: linear-gradient(135deg, transparent 45%, var(--muted) 45%, var(--muted) 55%, transparent 55%), var(--surface); }
+.swatch.on { outline: 2px solid var(--accent); outline-offset: 2px; }
 .project-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .project-head input[type="checkbox"], .task input[type="checkbox"], .task-done input[type="checkbox"] {
   width: 17px; height: 17px; accent-color: var(--accent); flex-shrink: 0; margin: 0;
