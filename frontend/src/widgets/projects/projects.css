@@ -2,6 +2,11 @@
 .projects-widget { display: flex; flex-direction: column; gap: 10px; }
 .projects-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .projects-overdue { color: var(--danger); font-weight: 550; }
+.projects-head-actions { display: flex; gap: 6px; margin-left: auto; }
+.projects-reorder-hint { margin: 0; }
+.project-sort { align-self: flex-start; }
+.move-buttons { display: flex; gap: 2px; flex-shrink: 0; }
+.move-buttons .icon-button:disabled { opacity: 0.3; }
 .projects-widget input[type="text"], .projects-widget input[type="date"], .projects-form input[type="date"],
 .task-comment-add textarea, .task-comment-edit textarea {
   min-width: 0; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border);

@@ -78,7 +78,7 @@ UNDO_ACTIONS: dict[str, Any] = {
     "delete_reminder": lambda db, user, a: notes.delete_reminder(a["id"], user=user, db=db),
     "restore_reminder": lambda db, user, a: _restore_reminder(db, user, a["item"]),
     "delete_project": lambda db, user, a: projects.delete_project(a["id"], user=user, db=db),
-    "restore_projects": lambda db, user, a: [projects.restore_project(db, user, p) for p in a["projects"]],
+    "restore_projects": lambda db, user, a: projects.restore_projects(db, user, a["projects"], a.get("order")),
     "delete_food": lambda db, user, a: nutrition.delete_entry(a["id"], user=user, db=db),
     "readd_food": lambda db, user, a: _readd_food(db, user, a["entry"]),
     "delete_pantry_item": lambda db, user, a: nutrition.delete_pantry_item(a["id"], user=user, db=db),

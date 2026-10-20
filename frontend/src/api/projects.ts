@@ -25,13 +25,13 @@ export type Project = {
   done: boolean
   done_at: string | null
   created_at: string
-  tasks: ProjectTask[] // in date order: deadline, then when added
+  tasks: ProjectTask[] // in the user's order (new ones are slotted in by deadline)
   progress: { done: number; total: number }
 }
 
 export type ProjectsData = {
   today: string
-  projects: Project[] // open, soonest deadline first
+  projects: Project[] // open, in the user's order
   completed: Project[] // most recently completed first
 }
 
@@ -54,3 +54,12 @@ export const projectsApi = {
     request<ProjectComment>(`${base}/comments/${id}`, { method: 'PATCH', ...json({ text }) }),
   deleteComment: (id: string) => request<unknown>(`${base}/comments/${id}`, { method: 'DELETE' }),
 }
+
+// Reorder: ids in the new order (unlisted ones follow), or sort the whole list by deadline
+export const projectsOrderApi = {
+  projects: (order: { ids?: string[]; by_date?: boolean }) =>
+    request<{ order: string[] }>(`${base}/projects/order`, { method: 'PUT', ...json(order) }),
+  tasks: (projectId: string, order: { ids?: string[]; by_date?: boolean }) =>
+    request<{ order: string[] }>(`${base}/projects/${projectId}/tasks/order`, { method: 'PUT', ...json(order) }),
+}
+

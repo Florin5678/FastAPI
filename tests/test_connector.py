@@ -23,7 +23,7 @@ def test_claude_has_the_tools_and_the_overview_names_them():
                 "delete_calendar_event", "log_weight", "add_saved_food", "update_saved_food", "draft_email", "send_email",
                 "archive_email", "mark_email_read", "trash_email", "add_budget_entry", "update_workout", "update_reminder",
                 "get_projects", "add_project", "update_project", "delete_project", "add_task", "update_task", "delete_task",
-                "add_comment", "update_comment", "delete_comment"}
+                "add_comment", "update_comment", "delete_comment", "reorder_projects", "reorder_tasks"}
     assert expected <= names
     for tool in ("get_weight", "add_saved_food", "draft_email", "send_email", "plan_meals", "add_calendar_event", "get_projects",
                  "add_task", "update_task", "add_comment", "update_comment"):

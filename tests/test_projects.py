@@ -93,3 +93,43 @@ def test_claude_can_manage_projects_tasks_and_comments_and_undo(claude, db, user
     tools.add_project("Temp")
     claude.undo_last(db, user)  # undoing an add deletes it
     assert "Temp" not in [p["name"] for p in tools.get_projects()["projects"]]
+
+
+def test_tasks_and_projects_keep_a_manual_order_and_can_be_sorted_by_date(client):
+    p = client.post("/widgets/projects/projects", json={"name": "Trip"}).json()
+    ids = {}
+    for title, deadline in [("Book flights", "2026-11-01"), ("Pack", "2026-12-01"), ("Visa", "2026-10-25")]:
+        ids[title] = client.post(f"/widgets/projects/projects/{p['id']}/tasks", json={"title": title, "deadline": deadline}).json()["id"]
+    titles = lambda: [t["title"] for t in _data(client)["projects"][0]["tasks"]]  # noqa: E731
+    assert titles() == ["Visa", "Book flights", "Pack"]  # placed by date
+    client.put(f"/widgets/projects/projects/{p['id']}/tasks/order", json={"ids": [ids["Pack"], ids["Visa"]]})
+    assert titles() == ["Pack", "Visa", "Book flights"]  # listed first, the rest after
+    client.post(f"/widgets/projects/projects/{p['id']}/tasks", json={"title": "Insurance", "deadline": "2026-10-30"})
+    assert titles() == ["Insurance", "Pack", "Visa", "Book flights"]  # slotted before the first one due later
+    client.patch(f"/widgets/projects/tasks/{ids['Pack']}", json={"title": "Pack bags"})
+    assert titles()[1] == "Pack bags"  # other edits don't move it
+    client.put(f"/widgets/projects/projects/{p['id']}/tasks/order", json={"by_date": True})
+    assert titles() == ["Visa", "Insurance", "Book flights", "Pack bags"]
+    assert client.put(f"/widgets/projects/projects/{p['id']}/tasks/order", json={"ids": ["nope"]}).status_code == 404
+
+    q = client.post("/widgets/projects/projects", json={"name": "Taxes", "deadline": "2026-10-28"}).json()
+    names = lambda: [x["name"] for x in _data(client)["projects"]]  # noqa: E731
+    assert names() == ["Taxes", "Trip"]  # a dated project goes before ones without a deadline
+    client.put("/widgets/projects/projects/order", json={"ids": [p["id"], q["id"]]})
+    assert names() == ["Trip", "Taxes"]
+
+
+def test_claude_can_reorder_and_undo_restores_the_order(claude, db, user):
+    a = tools.add_project("A")
+    b = tools.add_project("B")
+    tools.reorder_projects([b["id"], a["id"]])
+    assert [p["name"] for p in tools.get_projects()["projects"]] == ["B", "A"]
+    claude.undo_last(db, user)
+    assert [p["name"] for p in tools.get_projects()["projects"]] == ["A", "B"]
+    t1, t2 = tools.add_task(a["id"], "one"), tools.add_task(a["id"], "two")
+    tools.reorder_tasks(a["id"], [t2["id"], t1["id"]])
+    assert [t["title"] for t in tools.get_projects()["projects"][0]["tasks"]] == ["two", "one"]
+    tools.delete_project(a["id"])
+    claude.undo_last(db, user)  # back in its old place, tasks in the user's order
+    first = tools.get_projects()["projects"][0]
+    assert first["name"] == "A" and [t["title"] for t in first["tasks"]] == ["two", "one"]

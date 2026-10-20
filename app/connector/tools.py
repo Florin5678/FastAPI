@@ -82,6 +82,7 @@ INSTRUCTIONS = (
     "reminders (add_reminder, update_reminder, delete_reminder; they can repeat daily, weekly or monthly), "
     "projects in their project tracker (get_projects; add_project, update_project, delete_project; tasks with "
     "add_task, update_task, delete_task; comments under tasks with add_comment, update_comment, delete_comment; "
+    "reorder_projects / reorder_tasks change the order, or sort by date; "
     "projects and tasks have optional deadlines and are marked completed / not completed with done=true/false), "
     "body weight (get_weight, log_weight, delete_weight) and My foods, the foods they log again and again "
     "(list_saved_foods, add_saved_food, update_saved_food, delete_saved_food, log_saved_food). "
@@ -524,12 +525,17 @@ def _task_label(project: dict, task: dict) -> str:
     return f'"{task["title"]}" ({project["name"]})'
 
 
+def _undo(before: list[dict], call: _Call) -> dict:
+    """Undo = put these projects back as they were, and the projects in their earlier order."""
+    return {"action": "restore_projects", "args": {"projects": before, "order": projects.project_order(call.db, call.user)}}
+
+
 @mcp.tool(annotations=READ)
 def get_projects(include_completed: bool = False) -> dict:
-    """Projects: the user's project tracker. Open projects (soonest deadline first), each with its progress and
-    its tasks in date order (deadline, then when added; `done` marks completed ones) and every task's comments.
-    Ids are what the other project tools take. Completed projects are only listed (name, id, when completed)
-    unless include_completed=true."""
+    """Projects: the user's project tracker. Open projects in the user's order, each with its progress and its
+    tasks in the user's order (`done` marks completed ones) and every task's comments. New projects and tasks are
+    slotted in by deadline; reorder_projects / reorder_tasks change the order. Ids are what the other project tools
+    take. Completed projects are only listed (name, id, when completed) unless include_completed=true."""
     with _Call() as call:
         data = _widget(call, projects.WIDGET_ID)
         if not include_completed:
@@ -553,6 +559,7 @@ def update_project(project_id: str, name: Optional[str] = None, deadline: Option
     completed (done=true) / not completed (done=false). Its tasks are kept as they are."""
     with _Call() as call:
         before = _run(projects.project_of, call.db, call.user, project_id=project_id)
+        undo = _undo([before], call)  # taken before the change
         fields: dict[str, Any] = {}
         if name is not None:
             fields["name"] = name
@@ -562,7 +569,7 @@ def update_project(project_id: str, name: Optional[str] = None, deadline: Option
             fields["done"] = done
         project = _run(projects.update_project, project_id, projects.ProjectPatch(**fields), user=call.user, db=call.db)
         what = "Completed" if done else "Reopened" if done is False else "Changed"
-        call.record("update_project", f"{what} project {_project_label(project)}", {"action": "restore_projects", "args": {"projects": [before]}})
+        call.record("update_project", f"{what} project {_project_label(project)}", undo)
         return project
 
 
@@ -571,11 +578,40 @@ def delete_project(project_id: str) -> str:
     """Projects: delete a project with all its tasks and comments. Confirm with the user first. Undoable."""
     with _Call() as call:
         before = _run(projects.project_of, call.db, call.user, project_id=project_id)
+        undo = _undo([before], call)  # taken before the change
         _run(projects.delete_project, project_id, user=call.user, db=call.db)
         tasks = len(before["tasks"])
         call.record("delete_project", f"Deleted project {_project_label(before)} ({tasks} task{'s' if tasks != 1 else ''})",
-                    {"action": "restore_projects", "args": {"projects": [before]}})
+                    undo)
         return "Deleted"
+
+
+@mcp.tool(annotations=EDIT)
+def reorder_projects(project_ids: Optional[list[str]] = None, by_date: bool = False) -> dict:
+    """Projects: change the order of the projects. `project_ids`: ids in the new order (any not listed keep their
+    order after them), or by_date=true to sort all projects by deadline (no deadline last)."""
+    with _Call() as call:
+        if not project_ids and not by_date:
+            raise ToolError("Give project_ids in the new order, or by_date=true")
+        undo = _undo([], call)
+        result = _run(projects.order_projects, projects.OrderIn(ids=project_ids or [], by_date=by_date), user=call.user, db=call.db)
+        call.record("reorder_projects", "Sorted projects by date" if by_date else "Reordered projects", undo)
+        return result
+
+
+@mcp.tool(annotations=EDIT)
+def reorder_tasks(project_id: str, task_ids: Optional[list[str]] = None, by_date: bool = False) -> dict:
+    """Projects: change the order of a project's tasks. `task_ids`: ids in the new order (any not listed keep
+    their order after them), or by_date=true to sort the project's tasks by deadline (no deadline last)."""
+    with _Call() as call:
+        if not task_ids and not by_date:
+            raise ToolError("Give task_ids in the new order, or by_date=true")
+        before = _run(projects.project_of, call.db, call.user, project_id=project_id)
+        undo = _undo([before], call)  # taken before the change
+        result = _run(projects.order_tasks, project_id, projects.OrderIn(ids=task_ids or [], by_date=by_date), user=call.user, db=call.db)
+        what = "Sorted tasks by date" if by_date else "Reordered tasks"
+        call.record("reorder_tasks", f"{what} in {_project_label(before)}", undo)
+        return result
 
 
 @mcp.tool(annotations=WRITE)
@@ -584,8 +620,9 @@ def add_task(project_id: str, title: str, deadline: Optional[str] = None) -> dic
     tasks are shown in date order."""
     with _Call() as call:
         before = _run(projects.project_of, call.db, call.user, project_id=project_id)
+        undo = _undo([before], call)  # taken before the change
         task = _run(projects.add_task, project_id, projects.TaskIn(title=title, deadline=_deadline(deadline)), user=call.user, db=call.db)
-        call.record("add_task", f"Added task {_task_label(before, task)}", {"action": "restore_projects", "args": {"projects": [before]}})
+        call.record("add_task", f"Added task {_task_label(before, task)}", undo)
         return task
 
 
@@ -598,6 +635,7 @@ def update_task(task_id: str, title: Optional[str] = None, deadline: Optional[st
         before = [_run(projects.project_of, call.db, call.user, task_id=task_id)]
         if project_id and project_id != before[0]["id"]:
             before.append(_run(projects.project_of, call.db, call.user, project_id=project_id))
+        undo = _undo(before, call)  # taken before the change
         fields: dict[str, Any] = {}
         if title is not None:
             fields["title"] = title
@@ -609,7 +647,7 @@ def update_task(task_id: str, title: Optional[str] = None, deadline: Optional[st
             fields["project_id"] = project_id
         task = _run(projects.update_task, task_id, projects.TaskPatch(**fields), user=call.user, db=call.db)
         what = "Completed" if done else "Reopened" if done is False else "Moved" if len(before) > 1 and not fields.keys() - {"project_id"} else "Changed"
-        call.record("update_task", f"{what} task {_task_label(before[-1], task)}", {"action": "restore_projects", "args": {"projects": before}})
+        call.record("update_task", f"{what} task {_task_label(before[-1], task)}", undo)
         return task
 
 
@@ -618,9 +656,10 @@ def delete_task(task_id: str) -> str:
     """Projects: delete a task and its comments. Confirm with the user first. Undoable."""
     with _Call() as call:
         before = _run(projects.project_of, call.db, call.user, task_id=task_id)
+        undo = _undo([before], call)  # taken before the change
         task = next(t for t in before["tasks"] if t["id"] == task_id)
         _run(projects.delete_task, task_id, user=call.user, db=call.db)
-        call.record("delete_task", f"Deleted task {_task_label(before, task)}", {"action": "restore_projects", "args": {"projects": [before]}})
+        call.record("delete_task", f"Deleted task {_task_label(before, task)}", undo)
         return "Deleted"
 
 
@@ -629,9 +668,10 @@ def add_comment(task_id: str, text: str) -> dict:
     """Projects: add a comment under a task (notes, progress, links...). Comments are kept oldest first."""
     with _Call() as call:
         before = _run(projects.project_of, call.db, call.user, task_id=task_id)
+        undo = _undo([before], call)  # taken before the change
         task = next(t for t in before["tasks"] if t["id"] == task_id)
         comment = _run(projects.add_comment, task_id, projects.CommentIn(text=text), user=call.user, db=call.db)
-        call.record("add_comment", f"Commented on task {_task_label(before, task)}", {"action": "restore_projects", "args": {"projects": [before]}})
+        call.record("add_comment", f"Commented on task {_task_label(before, task)}", undo)
         return comment
 
 
@@ -640,9 +680,10 @@ def update_comment(comment_id: str, text: str) -> dict:
     """Projects: replace the text of a comment (id from get_projects)."""
     with _Call() as call:
         before = _run(projects.project_of, call.db, call.user, comment_id=comment_id)
+        undo = _undo([before], call)  # taken before the change
         task = next(t for t in before["tasks"] if any(c["id"] == comment_id for c in t["comments"]))
         comment = _run(projects.update_comment, comment_id, projects.CommentIn(text=text), user=call.user, db=call.db)
-        call.record("update_comment", f"Edited a comment on task {_task_label(before, task)}", {"action": "restore_projects", "args": {"projects": [before]}})
+        call.record("update_comment", f"Edited a comment on task {_task_label(before, task)}", undo)
         return comment
 
 
@@ -651,9 +692,10 @@ def delete_comment(comment_id: str) -> str:
     """Projects: delete a comment. Undoable."""
     with _Call() as call:
         before = _run(projects.project_of, call.db, call.user, comment_id=comment_id)
+        undo = _undo([before], call)  # taken before the change
         task = next(t for t in before["tasks"] if any(c["id"] == comment_id for c in t["comments"]))
         _run(projects.delete_comment, comment_id, user=call.user, db=call.db)
-        call.record("delete_comment", f"Deleted a comment on task {_task_label(before, task)}", {"action": "restore_projects", "args": {"projects": [before]}})
+        call.record("delete_comment", f"Deleted a comment on task {_task_label(before, task)}", undo)
         return "Deleted"
 
 

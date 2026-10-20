@@ -4,8 +4,9 @@
 #   config["projects"] = [{id, name, deadline, done, done_at, created_at,
 #                          tasks: [{id, title, deadline, done, done_at, created_at,
 #                                   comments: [{id, text, created_at, edited_at}]}]}]
-# Tasks are ordered chronologically within a project: by deadline (tasks without one last),
-# then by when they were added. Claude edits the same data through the connector.
+# Projects and tasks are kept in the user's order (the list order). New ones, and ones whose
+# deadline changes, are slotted in by date (before the first item due later; no deadline = last),
+# and a list can be sorted by date again. Claude edits the same data through the connector.
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
@@ -44,14 +45,30 @@ def _copy(project: dict) -> dict:
     return {**project, "tasks": [{**t, "comments": [dict(c) for c in t.get("comments", [])]} for t in project.get("tasks", [])]}
 
 
-def _chronological(item: dict) -> tuple:
-    return (item.get("deadline") is None, item.get("deadline") or "", item["created_at"])
+def _by_date(item: dict) -> tuple:
+    return (item.get("deadline") is None, item.get("deadline") or "")
+
+
+def _place(items: list[dict], item: dict) -> None:
+    """Insert `item` at its date position: before the first item due later (or without a deadline)."""
+    if item in items:
+        items.remove(item)
+    key = _by_date(item)
+    index = next((i for i, other in enumerate(items) if _by_date(other) > key), len(items))
+    items.insert(index, item)
+
+
+def _reorder(items: list[dict], ids: list[str], what: str) -> list[dict]:
+    """The items in the order of `ids`; any not listed keep their order after them."""
+    by_id = {i["id"]: i for i in items}
+    unknown = [i for i in ids if i not in by_id]
+    if unknown:
+        raise HTTPException(status_code=404, detail=f"Unknown {what}: {', '.join(unknown)}")
+    listed = list(dict.fromkeys(ids))
+    return [by_id[i] for i in listed] + [i for i in items if i["id"] not in listed]
 
 
 def _save(row: Integration, projects: list[dict]) -> None:
-    for p in projects:
-        p["tasks"].sort(key=_chronological)
-    projects.sort(key=_chronological)
     row.config = {**(row.config or {}), "projects": projects}  # JSON columns aren't mutation-tracked
     row.updated_at = datetime.utcnow()
 
@@ -91,12 +108,22 @@ def project_of(db: Session, user: User, *, project_id: str | None = None, task_i
     return _find_comment(projects, comment_id or "")[0]
 
 
-def restore_project(db: Session, user: User, project: dict) -> None:
-    """Put a project back exactly as it was (same ids), replacing its current state (undo)."""
+def restore_projects(db: Session, user: User, saved: list[dict], order: Optional[list[str]] = None) -> None:
+    """Undo: put projects back exactly as they were (same ids), replacing their current state, and
+    the projects back in their earlier order."""
     row = widget_row(db, user, WIDGET_ID)
-    projects = [p for p in _projects(row) if p["id"] != project["id"]]
-    _save(row, [*projects, _copy(project)])
+    current = _projects(row)
+    for project in saved:
+        index = next((i for i, p in enumerate(current) if p["id"] == project["id"]), len(current))
+        current[index:index + 1] = [_copy(project)]
+    if order:
+        current = _reorder(current, [i for i in order if any(p["id"] == i for p in current)], "project")
+    _save(row, current)
     db.commit()
+
+
+def project_order(db: Session, user: User) -> list[str]:
+    return [p["id"] for p in _projects(widget_row(db, user, WIDGET_ID))]
 
 
 # ---- Widget ----
@@ -108,7 +135,6 @@ def _progress(project: dict) -> dict:
 def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     projects = _projects(widget_row(db, user, WIDGET_ID))
     for p in projects:
-        p["tasks"].sort(key=_chronological)
         p["progress"] = _progress(p)
     return {
         "today": local_today(ctx.tz).isoformat(),
@@ -134,7 +160,7 @@ def brief(data: dict, limit: int | None = None) -> str:
         return "No open projects."
     count = limit or 15
     soon = (today + timedelta(days=SOON_DAYS)).isoformat()
-    lines = [f"Open projects ({len(data['projects'])}, soonest deadline first):"]
+    lines = [f"Open projects ({len(data['projects'])}, in the user's order):"]
     upcoming = []
     for p in data["projects"]:
         head = f"- {p['name']}: {p['progress']['done']}/{p['progress']['total']} tasks done"
@@ -157,7 +183,7 @@ def brief(data: dict, limit: int | None = None) -> str:
 register(WidgetDefinition(
     id=WIDGET_ID,
     name="Projects",
-    description="A project tracker: tasks grouped by project with deadlines, in date order, comments on tasks, and completed ticks.",
+    description="A project tracker: tasks grouped by project with deadlines, comments on tasks and completed ticks; reorder them or sort by date.",
     fetch=fetch,
     brief=brief,
     default_size=(4, 10),
@@ -199,6 +225,11 @@ class CommentIn(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
 
 
+class OrderIn(BaseModel):
+    ids: list[str] = Field(default_factory=list, max_length=MAX_TASKS)  # the new order (unlisted ones follow)
+    by_date: bool = False  # instead: sort the whole list by deadline (no deadline last)
+
+
 def _text(value: str, what: str) -> str:
     value = value.strip()
     if not value:
@@ -233,7 +264,8 @@ def add_project(body: ProjectIn, user: User = Depends(get_current_user), db: Ses
         raise HTTPException(status_code=422, detail=f"You can keep up to {MAX_PROJECTS} projects; delete some old ones first")
     project = {"id": _new_id(), "name": _text(body.name, "project name"), "deadline": _deadline(body.deadline),
                "done": False, "done_at": None, "created_at": _now(), "tasks": []}
-    _commit(db, row, [*projects, project])
+    _place(projects, project)
+    _commit(db, row, projects)
     return project
 
 
@@ -243,12 +275,22 @@ def update_project(project_id: str, body: ProjectPatch, user: User = Depends(get
     project = _find_project(projects, project_id)
     if body.name is not None:
         project["name"] = _text(body.name, "project name")
-    if "deadline" in body.model_fields_set:
+    if "deadline" in body.model_fields_set and project["deadline"] != _deadline(body.deadline):
         project["deadline"] = _deadline(body.deadline)
+        _place(projects, project)
     if body.done is not None:
         _set_done(project, body.done)
     _commit(db, row, projects)
     return project
+
+
+@router.put("/projects/order")
+def order_projects(body: OrderIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Reorder the projects: `ids` in the new order, or by_date=true to sort them by deadline."""
+    row, projects = _load(db, user)
+    projects = sorted(projects, key=_by_date) if body.by_date else _reorder(projects, body.ids, "project")
+    _commit(db, row, projects)
+    return {"order": [p["id"] for p in projects]}
 
 
 @router.delete("/projects/{project_id}")
@@ -267,7 +309,7 @@ def add_task(project_id: str, body: TaskIn, user: User = Depends(get_current_use
         raise HTTPException(status_code=422, detail=f"A project holds up to {MAX_TASKS} tasks")
     task = {"id": _new_id(), "title": _text(body.title, "task"), "deadline": _deadline(body.deadline),
             "done": False, "done_at": None, "created_at": _now(), "comments": []}
-    project["tasks"].append(task)
+    _place(project["tasks"], task)
     _commit(db, row, projects)
     return task
 
@@ -278,8 +320,9 @@ def update_task(task_id: str, body: TaskPatch, user: User = Depends(get_current_
     project, task = _find_task(projects, task_id)
     if body.title is not None:
         task["title"] = _text(body.title, "task")
-    if "deadline" in body.model_fields_set:
+    if "deadline" in body.model_fields_set and task["deadline"] != _deadline(body.deadline):
         task["deadline"] = _deadline(body.deadline)
+        _place(project["tasks"], task)
     if body.done is not None:
         _set_done(task, body.done)
     if body.project_id and body.project_id != project["id"]:
@@ -287,9 +330,20 @@ def update_task(task_id: str, body: TaskPatch, user: User = Depends(get_current_
         if len(target["tasks"]) >= MAX_TASKS:
             raise HTTPException(status_code=422, detail=f"A project holds up to {MAX_TASKS} tasks")
         project["tasks"].remove(task)
-        target["tasks"].append(task)
+        _place(target["tasks"], task)
     _commit(db, row, projects)
     return task
+
+
+@router.put("/projects/{project_id}/tasks/order")
+def order_tasks(project_id: str, body: OrderIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Reorder a project's tasks: `ids` in the new order, or by_date=true to sort them by deadline."""
+    row, projects = _load(db, user)
+    project = _find_project(projects, project_id)
+    tasks = project["tasks"]
+    project["tasks"] = sorted(tasks, key=_by_date) if body.by_date else _reorder(tasks, body.ids, "task")
+    _commit(db, row, projects)
+    return {"order": [t["id"] for t in project["tasks"]]}
 
 
 @router.delete("/tasks/{task_id}")
