@@ -55,8 +55,8 @@ DEFAULT_CLAUDE_PROMPT = (
     '"How to answer" part says. If you can\'t use that connector here, tell me to switch it on for this chat.'
 )
 # How many items a widget's brief() sends by default (widgets not listed have no list)
-DEFAULT_LIMITS = {"email_summary": 15, "calendar": 25, "news": 3, "notes": 15}
-ITEM_LABELS = {"news": "headlines per topic", "calendar": "events", "email_summary": "emails", "notes": "reminders"}
+DEFAULT_LIMITS = {"email_summary": 15, "calendar": 25, "news": 3, "notes": 15, "projects": 15}
+ITEM_LABELS = {"news": "headlines per topic", "calendar": "events", "email_summary": "emails", "notes": "reminders", "projects": "upcoming tasks"}
 # Widget settings used when fetching for the briefing (the tile may show less)
 BRIEF_SETTINGS = {"news": {"topic": "All", "max_items": 500}}
 EMAIL_CATEGORIES = [*get_args(Category), "unsummarized"]

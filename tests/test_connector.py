@@ -21,9 +21,12 @@ def test_claude_has_the_tools_and_the_overview_names_them():
     expected = {"get_briefing", "plan_meals", "log_food", "update_food", "get_nutrition_history", "add_pantry_items",
                 "add_shopping_items", "move_to_pantry", "set_pantry_priority", "add_calendar_event", "update_calendar_event",
                 "delete_calendar_event", "log_weight", "add_saved_food", "update_saved_food", "draft_email", "send_email",
-                "archive_email", "mark_email_read", "trash_email", "add_budget_entry", "update_workout", "update_reminder"}
+                "archive_email", "mark_email_read", "trash_email", "add_budget_entry", "update_workout", "update_reminder",
+                "get_projects", "add_project", "update_project", "delete_project", "add_task", "update_task", "delete_task",
+                "add_comment", "update_comment", "delete_comment"}
     assert expected <= names
-    for tool in ("get_weight", "add_saved_food", "draft_email", "send_email", "plan_meals", "add_calendar_event"):
+    for tool in ("get_weight", "add_saved_food", "draft_email", "send_email", "plan_meals", "add_calendar_event", "get_projects",
+                 "add_task", "update_task", "add_comment", "update_comment"):
         assert tool in tools.INSTRUCTIONS, tool
 
 

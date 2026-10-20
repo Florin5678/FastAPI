@@ -21,7 +21,7 @@ from app.core.timeutil import DASHBOARD_TZ
 from app.mail import gmail_actions
 from app.mail.routes import _email_dict
 from app.models import BudgetEntry, Email, NutritionEntry, User, Workout
-from app.widgets import REGISTRY, assistant, budget, google_calendar, gym, news, notes, nutrition, weather, weight
+from app.widgets import REGISTRY, assistant, budget, google_calendar, gym, news, notes, nutrition, projects, weather, weight
 from app.widgets.registry import WidgetContext, widget_row
 
 TIMEZONE = DASHBOARD_TZ  # the user's local time for "today"
@@ -71,7 +71,7 @@ RECEIPT_GUIDE = (
 )
 
 INSTRUCTIONS = (
-    "This is the user's personal dashboard (calendar, email, reminders, nutrition, gym, budget, "
+    "This is the user's personal dashboard (calendar, email, reminders, projects, nutrition, gym, budget, "
     "weather, news). Times are in the user's local timezone. Every change you make is logged on the dashboard "
     "and can be undone (see list_recent_changes / undo_change). Confirm with the user before deleting things. "
     "The user's journal is private and not available. "
@@ -80,6 +80,9 @@ INSTRUCTIONS = (
     "delete_workout), budget (add_budget_entry, update_budget_entry, delete_budget_entry, set_budget; expenses "
     "use a fixed list of sub-categories, see add_budget_entry), "
     "reminders (add_reminder, update_reminder, delete_reminder; they can repeat daily, weekly or monthly), "
+    "projects in their project tracker (get_projects; add_project, update_project, delete_project; tasks with "
+    "add_task, update_task, delete_task; comments under tasks with add_comment, update_comment, delete_comment; "
+    "projects and tasks have optional deadlines and are marked completed / not completed with done=true/false), "
     "body weight (get_weight, log_weight, delete_weight) and My foods, the foods they log again and again "
     "(list_saved_foods, add_saved_food, update_saved_food, delete_saved_food, log_saved_food). "
     "Email: you can draft replies or new emails (draft_email), archive, mark read/unread and trash emails; "
@@ -499,6 +502,158 @@ def delete_reminder(reminder_id: str) -> str:
         before = _find_reminder(call, reminder_id)
         _run(notes.delete_reminder, reminder_id, user=call.user, db=call.db)
         call.record("delete_reminder", f'Deleted reminder "{before["text"]}"', {"action": "restore_reminder", "args": {"item": before}})
+        return "Deleted"
+
+
+# ---- Projects ----
+
+def _deadline(value: Optional[str]) -> Optional[date]:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError as e:
+        raise ToolError("Use a deadline like 2026-11-15") from e
+
+
+def _project_label(project: dict) -> str:
+    return f'"{project["name"]}"'
+
+
+def _task_label(project: dict, task: dict) -> str:
+    return f'"{task["title"]}" ({project["name"]})'
+
+
+@mcp.tool(annotations=READ)
+def get_projects(include_completed: bool = False) -> dict:
+    """Projects: the user's project tracker. Open projects (soonest deadline first), each with its progress and
+    its tasks in date order (deadline, then when added; `done` marks completed ones) and every task's comments.
+    Ids are what the other project tools take. Completed projects are only listed (name, id, when completed)
+    unless include_completed=true."""
+    with _Call() as call:
+        data = _widget(call, projects.WIDGET_ID)
+        if not include_completed:
+            data["completed"] = [{"id": p["id"], "name": p["name"], "done_at": p["done_at"]} for p in data["completed"]]
+        return data
+
+
+@mcp.tool(annotations=WRITE)
+def add_project(name: str, deadline: Optional[str] = None) -> dict:
+    """Projects: add a NEW project. `deadline`: optional date like 2026-11-15. Add its tasks with add_task."""
+    with _Call() as call:
+        project = _run(projects.add_project, projects.ProjectIn(name=name, deadline=_deadline(deadline)), user=call.user, db=call.db)
+        call.record("add_project", f"Added project {_project_label(project)}", {"action": "delete_project", "args": {"id": project["id"]}})
+        return project
+
+
+@mcp.tool(annotations=EDIT)
+def update_project(project_id: str, name: Optional[str] = None, deadline: Optional[str] = None,
+                   clear_deadline: bool = False, done: Optional[bool] = None) -> dict:
+    """Projects: rename a project, change its deadline (date like 2026-11-15, or clear_deadline=true), or mark it
+    completed (done=true) / not completed (done=false). Its tasks are kept as they are."""
+    with _Call() as call:
+        before = _run(projects.project_of, call.db, call.user, project_id=project_id)
+        fields: dict[str, Any] = {}
+        if name is not None:
+            fields["name"] = name
+        if deadline is not None or clear_deadline:
+            fields["deadline"] = None if clear_deadline else _deadline(deadline)
+        if done is not None:
+            fields["done"] = done
+        project = _run(projects.update_project, project_id, projects.ProjectPatch(**fields), user=call.user, db=call.db)
+        what = "Completed" if done else "Reopened" if done is False else "Changed"
+        call.record("update_project", f"{what} project {_project_label(project)}", {"action": "restore_projects", "args": {"projects": [before]}})
+        return project
+
+
+@mcp.tool(annotations=DELETE)
+def delete_project(project_id: str) -> str:
+    """Projects: delete a project with all its tasks and comments. Confirm with the user first. Undoable."""
+    with _Call() as call:
+        before = _run(projects.project_of, call.db, call.user, project_id=project_id)
+        _run(projects.delete_project, project_id, user=call.user, db=call.db)
+        tasks = len(before["tasks"])
+        call.record("delete_project", f"Deleted project {_project_label(before)} ({tasks} task{'s' if tasks != 1 else ''})",
+                    {"action": "restore_projects", "args": {"projects": [before]}})
+        return "Deleted"
+
+
+@mcp.tool(annotations=WRITE)
+def add_task(project_id: str, title: str, deadline: Optional[str] = None) -> dict:
+    """Projects: add a NEW task to a project (id from get_projects). `deadline`: optional date like 2026-11-15;
+    tasks are shown in date order."""
+    with _Call() as call:
+        before = _run(projects.project_of, call.db, call.user, project_id=project_id)
+        task = _run(projects.add_task, project_id, projects.TaskIn(title=title, deadline=_deadline(deadline)), user=call.user, db=call.db)
+        call.record("add_task", f"Added task {_task_label(before, task)}", {"action": "restore_projects", "args": {"projects": [before]}})
+        return task
+
+
+@mcp.tool(annotations=EDIT)
+def update_task(task_id: str, title: Optional[str] = None, deadline: Optional[str] = None, clear_deadline: bool = False,
+                done: Optional[bool] = None, project_id: Optional[str] = None) -> dict:
+    """Projects: change a task's title or deadline (date like 2026-11-15, or clear_deadline=true), mark it
+    completed (done=true) / not completed (done=false), or move it to another project (`project_id`)."""
+    with _Call() as call:
+        before = [_run(projects.project_of, call.db, call.user, task_id=task_id)]
+        if project_id and project_id != before[0]["id"]:
+            before.append(_run(projects.project_of, call.db, call.user, project_id=project_id))
+        fields: dict[str, Any] = {}
+        if title is not None:
+            fields["title"] = title
+        if deadline is not None or clear_deadline:
+            fields["deadline"] = None if clear_deadline else _deadline(deadline)
+        if done is not None:
+            fields["done"] = done
+        if project_id:
+            fields["project_id"] = project_id
+        task = _run(projects.update_task, task_id, projects.TaskPatch(**fields), user=call.user, db=call.db)
+        what = "Completed" if done else "Reopened" if done is False else "Moved" if len(before) > 1 and not fields.keys() - {"project_id"} else "Changed"
+        call.record("update_task", f"{what} task {_task_label(before[-1], task)}", {"action": "restore_projects", "args": {"projects": before}})
+        return task
+
+
+@mcp.tool(annotations=DELETE)
+def delete_task(task_id: str) -> str:
+    """Projects: delete a task and its comments. Confirm with the user first. Undoable."""
+    with _Call() as call:
+        before = _run(projects.project_of, call.db, call.user, task_id=task_id)
+        task = next(t for t in before["tasks"] if t["id"] == task_id)
+        _run(projects.delete_task, task_id, user=call.user, db=call.db)
+        call.record("delete_task", f"Deleted task {_task_label(before, task)}", {"action": "restore_projects", "args": {"projects": [before]}})
+        return "Deleted"
+
+
+@mcp.tool(annotations=WRITE)
+def add_comment(task_id: str, text: str) -> dict:
+    """Projects: add a comment under a task (notes, progress, links...). Comments are kept oldest first."""
+    with _Call() as call:
+        before = _run(projects.project_of, call.db, call.user, task_id=task_id)
+        task = next(t for t in before["tasks"] if t["id"] == task_id)
+        comment = _run(projects.add_comment, task_id, projects.CommentIn(text=text), user=call.user, db=call.db)
+        call.record("add_comment", f"Commented on task {_task_label(before, task)}", {"action": "restore_projects", "args": {"projects": [before]}})
+        return comment
+
+
+@mcp.tool(annotations=EDIT)
+def update_comment(comment_id: str, text: str) -> dict:
+    """Projects: replace the text of a comment (id from get_projects)."""
+    with _Call() as call:
+        before = _run(projects.project_of, call.db, call.user, comment_id=comment_id)
+        task = next(t for t in before["tasks"] if any(c["id"] == comment_id for c in t["comments"]))
+        comment = _run(projects.update_comment, comment_id, projects.CommentIn(text=text), user=call.user, db=call.db)
+        call.record("update_comment", f"Edited a comment on task {_task_label(before, task)}", {"action": "restore_projects", "args": {"projects": [before]}})
+        return comment
+
+
+@mcp.tool(annotations=DELETE)
+def delete_comment(comment_id: str) -> str:
+    """Projects: delete a comment. Undoable."""
+    with _Call() as call:
+        before = _run(projects.project_of, call.db, call.user, comment_id=comment_id)
+        task = next(t for t in before["tasks"] if any(c["id"] == comment_id for c in t["comments"]))
+        _run(projects.delete_comment, comment_id, user=call.user, db=call.db)
+        call.record("delete_comment", f"Deleted a comment on task {_task_label(before, task)}", {"action": "restore_projects", "args": {"projects": [before]}})
         return "Deleted"
 
 

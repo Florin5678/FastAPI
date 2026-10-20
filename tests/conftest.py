@@ -28,7 +28,7 @@ from app.core.security import get_current_user  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import Integration, User  # noqa: E402
 
-LOCAL_WIDGETS = ("nutrition", "notes", "gym", "weight", "budget", "assistant")  # no network needed
+LOCAL_WIDGETS = ("nutrition", "notes", "projects", "gym", "weight", "budget", "assistant")  # no network needed
 
 
 @pytest.fixture()

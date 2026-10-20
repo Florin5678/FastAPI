@@ -1,0 +1,56 @@
+// Projects widget: projects -> tasks -> comments
+import { json, request } from './client'
+
+export type ProjectComment = {
+  id: string
+  text: string
+  created_at: string
+  edited_at: string | null
+}
+
+export type ProjectTask = {
+  id: string
+  title: string
+  deadline: string | null // a local date, YYYY-MM-DD
+  done: boolean
+  done_at: string | null
+  created_at: string
+  comments: ProjectComment[] // oldest first
+}
+
+export type Project = {
+  id: string
+  name: string
+  deadline: string | null
+  done: boolean
+  done_at: string | null
+  created_at: string
+  tasks: ProjectTask[] // in date order: deadline, then when added
+  progress: { done: number; total: number }
+}
+
+export type ProjectsData = {
+  today: string
+  projects: Project[] // open, soonest deadline first
+  completed: Project[] // most recently completed first
+}
+
+const base = '/widgets/projects'
+
+export const projectsApi = {
+  addProject: (name: string, deadline: string | null) =>
+    request<Project>(`${base}/projects`, { method: 'POST', ...json({ name, deadline }) }),
+  updateProject: (id: string, changes: Partial<Pick<Project, 'name' | 'deadline' | 'done'>>) =>
+    request<Project>(`${base}/projects/${id}`, { method: 'PATCH', ...json(changes) }),
+  deleteProject: (id: string) => request<unknown>(`${base}/projects/${id}`, { method: 'DELETE' }),
+  addTask: (projectId: string, title: string, deadline: string | null) =>
+    request<ProjectTask>(`${base}/projects/${projectId}/tasks`, { method: 'POST', ...json({ title, deadline }) }),
+  updateTask: (id: string, changes: Partial<Pick<ProjectTask, 'title' | 'deadline' | 'done'>> & { project_id?: string }) =>
+    request<ProjectTask>(`${base}/tasks/${id}`, { method: 'PATCH', ...json(changes) }),
+  deleteTask: (id: string) => request<unknown>(`${base}/tasks/${id}`, { method: 'DELETE' }),
+  addComment: (taskId: string, text: string) =>
+    request<ProjectComment>(`${base}/tasks/${taskId}/comments`, { method: 'POST', ...json({ text }) }),
+  updateComment: (id: string, text: string) =>
+    request<ProjectComment>(`${base}/comments/${id}`, { method: 'PATCH', ...json({ text }) }),
+  deleteComment: (id: string) => request<unknown>(`${base}/comments/${id}`, { method: 'DELETE' }),
+}

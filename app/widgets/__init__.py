@@ -12,6 +12,7 @@ from app.widgets import (  # noqa: F401
     weather,
     nutrition,
     notes,
+    projects,
     news,
     journal,
     google_calendar,

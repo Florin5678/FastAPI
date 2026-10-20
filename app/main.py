@@ -23,6 +23,7 @@ from app.widgets.gym import router as gym_router
 from app.widgets.journal import router as journal_router
 from app.widgets.notes import router as notes_router
 from app.widgets.nutrition import router as nutrition_router
+from app.widgets.projects import router as projects_router
 from app.widgets.routes import router as widget_router
 from app.widgets.weight import router as weight_router
 
@@ -85,6 +86,7 @@ app.include_router(mail_router, tags=["mail"])  # stored emails, summaries, dige
 app.include_router(widget_router, tags=["widgets"])  # generic widget registry, layout, settings, data
 app.include_router(nutrition_router)  # Nutrition widget: food log, history, food search (USDA + Open Food Facts)
 app.include_router(notes_router)  # Reminders widget
+app.include_router(projects_router)  # Projects widget: projects, tasks, comments
 app.include_router(journal_router)  # Journal widget: entries, prompts, locked history
 app.include_router(gym_router)  # Gym widget: log / delete workouts
 app.include_router(weight_router)  # Weight widget: log / delete weights

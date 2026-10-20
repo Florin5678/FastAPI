@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.models import ConnectorChange, User
 from app.mail import gmail_actions
-from app.widgets import budget, google_calendar, gym, notes, nutrition, weight
+from app.widgets import budget, google_calendar, gym, notes, nutrition, projects, weight
 
 
 def record(db: Session, user: User, client_id: Optional[str], tool: str, summary: str, undo: Optional[dict]) -> ConnectorChange:
@@ -77,6 +77,8 @@ def _readd_food(db: Session, user: User, entry: dict) -> None:
 UNDO_ACTIONS: dict[str, Any] = {
     "delete_reminder": lambda db, user, a: notes.delete_reminder(a["id"], user=user, db=db),
     "restore_reminder": lambda db, user, a: _restore_reminder(db, user, a["item"]),
+    "delete_project": lambda db, user, a: projects.delete_project(a["id"], user=user, db=db),
+    "restore_projects": lambda db, user, a: [projects.restore_project(db, user, p) for p in a["projects"]],
     "delete_food": lambda db, user, a: nutrition.delete_entry(a["id"], user=user, db=db),
     "readd_food": lambda db, user, a: _readd_food(db, user, a["entry"]),
     "delete_pantry_item": lambda db, user, a: nutrition.delete_pantry_item(a["id"], user=user, db=db),
