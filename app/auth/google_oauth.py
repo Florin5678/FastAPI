@@ -165,6 +165,8 @@ def google_callback(
         if refresh_token:
             token_row.refresh_token = encrypt(refresh_token)
         token_row.expires_at = expires_at
+        if refresh_token or purpose != "journal":
+            token_row.last_error = token_row.last_error_at = None  # a fresh sign-in: Google access works again
 
     db.commit()
 

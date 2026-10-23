@@ -214,8 +214,18 @@ code { font-size: 0.9em; background: var(--surface-2); padding: 1px 5px; border-
 .field input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 
+/* Google access problem (GoogleBanner) */
+.google-banner { display: flex; align-items: flex-start; gap: 12px; margin: 12px auto 0; padding: 12px 14px; max-width: 1400px;
+  width: calc(100% - 32px); border-radius: 12px; border: 1px solid var(--danger); background: var(--surface); font-size: 14px; }
+.google-banner-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.google-banner strong { color: var(--danger); }
+.google-banner details { color: var(--muted); font-size: 13px; }
+.google-banner summary { cursor: pointer; }
+.google-banner .button { flex-shrink: 0; white-space: nowrap; }
+
 /* Phones */
 @media (max-width: 640px) {
+  .google-banner { flex-direction: column; }
   .topbar { padding: 10px 16px; gap: 10px; position: static; } /* the intro is tall on phones: let it scroll away */
   .topbar-actions { gap: 6px; }
   .user { display: none; }

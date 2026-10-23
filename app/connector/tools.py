@@ -15,6 +15,7 @@ from mcp_types import ToolAnnotations
 from sqlalchemy.orm import Session
 
 from app.connector import changes
+from app.auth.google_tokens import google_status
 from app.connector.oauth import SCOPE, DashboardOAuthProvider, public_url
 from app.core.database import SessionLocal
 from app.core.timeutil import DASHBOARD_TZ
@@ -210,7 +211,9 @@ def get_calendar(days: int = 7) -> dict:
     with _Call() as call:
         data = _widget(call, "calendar", days=max(1, min(days, 31)))
         if data.get("needs_setup"):
-            return {"error": "The calendar isn't connected on the dashboard yet"}
+            problem = google_status(call.db, call.user.id)["problem"] or "it's missing the calendar permission"
+            return {"error": f"The dashboard can't read Google Calendar ({problem.rstrip('.')}). Use a Google Calendar "
+                             "connector instead if you have one, and tell the user to sign in to the dashboard again."}
         return {"events": [
             {"id": e["id"], "calendar_id": e["calendar_id"], "when": google_calendar._when(e), "title": e["title"],
              "location": e["location"], "calendar": e["calendar"], "all_day": e["all_day"], "start": e["start"], "end": e["end"]}
@@ -228,7 +231,11 @@ def list_emails(days: int = 2, category: Optional[str] = None, limit: int = 25) 
         if category:
             query = query.filter(Email.category == category.lower())
         rows = query.order_by(Email.timestamp.desc()).limit(max(1, min(limit, 100))).all()
-        return {"emails": [
+        google = google_status(call.db, call.user.id)
+        warning = None if google["ok"] else (
+            f"The dashboard can't sync Gmail right now ({google['problem'].rstrip('.')}), so recent emails may be "
+            "missing. Use a Gmail connector instead if you have one, and tell the user to sign in to the dashboard again.")
+        return {**({"warning": warning} if warning else {}), "emails": [
             {"id": e.id, "from": e.sender, "subject": e.subject, "category": e.category,
              "time": e.timestamp.replace(tzinfo=timezone.utc).astimezone(_zone()).isoformat(timespec="minutes") if e.timestamp else None,
              "summary": e.summary or e.snippet}

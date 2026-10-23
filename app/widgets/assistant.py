@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.auth.google_tokens import get_valid_access_token, google_status
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.core.timeutil import DASHBOARD_TZ
@@ -55,8 +56,27 @@ DEFAULT_CLAUDE_PROMPT = (
     '"How to answer" part says. If you can\'t use that connector here, tell me to switch it on for this chat.'
 )
 # How many items a widget's brief() sends by default (widgets not listed have no list)
-DEFAULT_LIMITS = {"email_summary": 15, "calendar": 25, "news": 3, "notes": 15, "projects": 15}
-ITEM_LABELS = {"news": "headlines per topic", "calendar": "events", "email_summary": "emails", "notes": "reminders", "projects": "upcoming tasks"}
+DEFAULT_LIMITS = {"email_summary": 15, "calendar": 25, "news": 3, "notes": 15, "projects": 30}
+ITEM_LABELS = {"news": "headlines per topic", "calendar": "events", "email_summary": "emails", "notes": "reminders", "projects": "open tasks"}
+# When the dashboard can't reach a Google service, the section says so and asks Claude to use
+# its own connector for it instead (claude.ai has Gmail / Google Calendar / Slack connectors)
+FALLBACK_NOTES = {
+    "email_summary": (
+        "Gmail", "this section may be missing recent emails. If you can use a Gmail connector, check my inbox for the "
+        "last 24 hours yourself and answer the email part from that"),
+    "calendar": (
+        "Google Calendar", "this section has no events. If you can use a Google Calendar connector, get my events for "
+        "today and the rest of the week yourself and answer the calendar part from that"),
+}
+# Answer sections added to everyone's settings once, after the app gains them (key -> section,
+# and the section it goes after); the user can edit or remove them like any other
+ADDED_SECTIONS = {
+    "projects": ("Urgent tasks", {
+        "name": "Projects",
+        "text": "Go through my open projects (see Projects): which tasks are overdue or due soon, the next task to "
+                "do in each project, and any project that looks stalled.",
+    }),
+}
 # Widget settings used when fetching for the briefing (the tile may show less)
 BRIEF_SETTINGS = {"news": {"topic": "All", "max_items": 500}}
 EMAIL_CATEGORIES = [*get_args(Category), "unsummarized"]
@@ -94,6 +114,8 @@ class AssistantSettings(BaseModel):
     # Morning brief (assistant_chat.py): written by Claude each day after this local time
     morning_brief: bool = False
     morning_brief_time: str = Field("07:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    # ADDED_SECTIONS already offered to this user (so a removed one doesn't come back)
+    added_sections: list[str] = Field(default_factory=list)
 
 
 def default_settings() -> AssistantSettings:
@@ -105,11 +127,30 @@ def default_settings() -> AssistantSettings:
                              "or sky events (see Today), and my calendar events for today and the coming days."),
             ExtraInstruction(name="Email", text="Which emails are important and which need a reply today."),
             ExtraInstruction(name="Urgent tasks", text="Which reminders are overdue or due soon (see Reminders)."),
+            ExtraInstruction(**ADDED_SECTIONS["projects"][1]),
             ExtraInstruction(name="Health", text="Meal and workout suggestions based on what I've eaten and trained "
                              "recently (see Nutrition and Gym)."),
             ExtraInstruction(name="News digest", text="The few most important headlines (see News)."),
         ],
+        added_sections=list(ADDED_SECTIONS),
     )
+
+
+def _add_new_sections(settings: AssistantSettings) -> bool:
+    """Put answer sections the app gained since the user saved their settings into them, once
+    (after the section they belong with, else at the end). Returns whether anything changed."""
+    changed = False
+    for key, (after, section) in ADDED_SECTIONS.items():
+        if key in settings.added_sections:
+            continue
+        settings.added_sections.append(key)
+        changed = True
+        names = [e.name.strip().lower() for e in settings.extras]
+        if section["name"].lower() in names or len(settings.extras) >= MAX_EXTRAS:
+            continue  # they already have one
+        index = names.index(after.lower()) + 1 if after.lower() in names else len(settings.extras)
+        settings.extras.insert(index, ExtraInstruction(**section))
+    return changed
 
 
 def _row(db: Session, user: User) -> Optional[Integration]:
@@ -124,6 +165,9 @@ def load_settings(db: Session, user: User) -> AssistantSettings:
             settings = AssistantSettings.model_validate(saved)
             # Drop widgets that no longer exist in the app
             settings.briefing = {k: v for k, v in settings.briefing.items() if k in REGISTRY}
+            if _add_new_sections(settings):
+                row.config = {**(row.config or {}), "assistant": settings.model_dump()}
+                db.commit()
             return settings
         except ValueError:
             logger.warning("Assistant settings for user %s are invalid; using defaults", user.id)
@@ -167,6 +211,11 @@ def briefing_sections(db: Session, user: User, ctx: WidgetContext, prefs: Assist
     rows = db.query(Integration).filter(Integration.user_id == user.id, Integration.status == "active").all()
     active = {row.app_name: row for row in rows}
     sections = [{"widget": "today", "name": "Today", "text": today_section(ctx.tz or TIMEZONE)}]
+    try:
+        get_valid_access_token(db, user.id)  # renews the Google sign-in if needed; a failure is recorded
+    except Exception:
+        pass  # google_status says why (a network hiccup isn't recorded: then it stays "ok")
+    google = google_status(db, user.id)
     for definition in REGISTRY.values():  # registry order = a stable, sensible order
         row = active.get(definition.id)
         if row is None or definition.brief is None or definition.id == WIDGET_ID:
@@ -182,11 +231,27 @@ def briefing_sections(db: Session, user: User, ctx: WidgetContext, prefs: Assist
         try:
             data, note = _apply_filters(definition.id, definition.fetch(db, user, widget_settings, ctx), prefs.filters)
             text = definition.brief(data, limit) + (f"\n{note}" if note else "")
+            text += _fallback_note(definition.id, data, google)
         except Exception:
             logger.warning("Briefing: %s widget failed", definition.id, exc_info=True)
             text = "(couldn't load right now)"
         sections.append({"widget": definition.id, "name": definition.name, "text": text})
     return sections
+
+
+def _fallback_note(widget_id: str, data: dict, google: dict) -> str:
+    """If the dashboard couldn't reach this widget's Google service: say so, and ask Claude to use
+    its own connector for it instead."""
+    if widget_id not in FALLBACK_NOTES:
+        return ""
+    unavailable = not google["ok"] or (widget_id == "calendar" and data.get("needs_setup"))
+    if not unavailable:
+        return ""
+    service, what = FALLBACK_NOTES[widget_id]
+    reason = google["problem"] or ("the Calendar API is switched off" if data.get("needs_setup") == "api_disabled"
+                                   else "the dashboard is missing the permission")
+    return (f"\n⚠ The dashboard can't reach {service} right now ({reason.rstrip('.')}), so {what}. If you can't, "
+            "say that the dashboard's Google access needs reconnecting.")
 
 
 def render_sections(sections: list[dict]) -> str:
@@ -276,6 +341,7 @@ def preview(body: AssistantSettings, user: User = Depends(get_current_user), db:
 
 @router.put("/settings")
 def save_settings(body: AssistantSettings, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    body.added_sections = list(ADDED_SECTIONS)  # saved from the dialog: every current section was offered
     for widget_id, rule in body.briefing.items():
         if widget_id not in REGISTRY:
             raise HTTPException(status_code=422, detail=f"Unknown widget {widget_id!r}")

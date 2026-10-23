@@ -6,6 +6,8 @@ export type Me = {
   email: string
   name: string | null
   summaries_enabled: boolean
+  // Whether the dashboard can use the Google sign-in (Gmail sync, Calendar), and if not why
+  google: { ok: boolean; problem: string | null; since: string | null }
 }
 
 export type EmailItem = {

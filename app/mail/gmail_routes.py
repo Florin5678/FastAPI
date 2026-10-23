@@ -125,7 +125,16 @@ def sync_gmail(
     show the count) and every 10 minutes by cron-job.org with X-API-Key, in which case
     the new emails are summarized in the background and the morning brief is written
     when it's due."""
-    access_token = _get_access_token(db, user)
+    from app.widgets.assistant_chat import maybe_morning_brief  # (here: avoids an import cycle)
+    try:
+        access_token = _get_access_token(db, user)
+    except HTTPException as e:
+        if not x_api_key:
+            raise  # "Sync now": show the reason
+        # The scheduled run: the Google sign-in needs renewing (the dashboard shows a banner).
+        # Answer OK so cron-job.org keeps the job on, and still write the morning brief.
+        background.add_task(maybe_morning_brief, user.id)
+        return {"synced": 0, "checked": 0, "google_problem": e.detail}
 
     list_data = _gmail_get("/messages", access_token, {"maxResults": max_results})
     message_ids = [m["id"] for m in list_data.get("messages", [])]
@@ -160,6 +169,5 @@ def sync_gmail(
     if x_api_key:
         if saved:
             background.add_task(_summarize_new, user.id)
-        from app.widgets.assistant_chat import maybe_morning_brief  # (here: avoids an import cycle)
         background.add_task(maybe_morning_brief, user.id)
     return {"synced": saved, "checked": len(message_ids)}

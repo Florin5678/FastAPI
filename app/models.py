@@ -33,6 +33,10 @@ class Token(Base):
     access_token = Column(Text, nullable=False)
     refresh_token = Column(Text, nullable=True)
     expires_at = Column(DateTime, nullable=True)
+    # Why the dashboard can't use this sign-in any more (e.g. Google says it expired or was
+    # revoked) and since when; cleared when the user signs in again
+    last_error = Column(Text, nullable=True)
+    last_error_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

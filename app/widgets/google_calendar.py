@@ -182,7 +182,7 @@ def delete_event(db: Session, user: User, calendar_id: str, event_id: str) -> No
 def brief(data: dict, limit: int | None = None) -> str:
     """The events grouped by day (multi-day events once, under their first day)."""
     if data["needs_setup"]:
-        return "Calendar not connected yet."
+        return "The dashboard couldn't read the calendar."
     if not data["events"]:
         return f"No events in the next {data['days']} day(s)."
     by_day: dict = {}

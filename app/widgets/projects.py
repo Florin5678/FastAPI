@@ -156,27 +156,38 @@ def _when(deadline: str, today: date) -> str:
     return f"due {date.fromisoformat(deadline):%a %d %b}"
 
 
+def _task_line(t: dict, today: date) -> str:
+    parts = [_when(t["deadline"], today) if t.get("deadline") else "no deadline"]
+    if t["comments"]:
+        latest = " ".join(t["comments"][-1]["text"].split())
+        parts.append(f"{len(t['comments'])} comment{'s' if len(t['comments']) != 1 else ''}, latest: "
+                     f"\"{latest[:150]}{'…' if len(latest) > 150 else ''}\"")
+    return f"  - {t['title']} ({'; '.join(parts)})"
+
+
 def brief(data: dict, limit: int | None = None) -> str:
+    """Every open project with its open tasks (in the user's order), then what's overdue or due soon."""
     today = date.fromisoformat(data["today"])
     if not data["projects"]:
         return "No open projects."
-    count = limit or 15
+    budget = limit or 30  # open tasks listed in all
     soon = (today + timedelta(days=SOON_DAYS)).isoformat()
-    lines = [f"Open projects ({len(data['projects'])}, in the user's order):"]
-    upcoming = []
+    lines = [f"Open projects ({len(data['projects'])}, in the user's order), each with its open tasks in order:"]
+    upcoming, listed = [], 0
     for p in data["projects"]:
+        open_tasks = [t for t in p["tasks"] if not t["done"]]
         head = f"- {p['name']}: {p['progress']['done']}/{p['progress']['total']} tasks done"
         lines.append(head + (f", project {_when(p['deadline'], today)}" if p.get("deadline") else ""))
-        upcoming += [(t["deadline"], p["name"], t) for t in p["tasks"] if not t["done"] and t.get("deadline") and t["deadline"] <= soon]
+        shown = open_tasks[:max(0, budget - listed)]
+        lines += [_task_line(t, today) for t in shown]
+        listed += len(shown)
+        if len(shown) < len(open_tasks):
+            lines.append(f"  (+{len(open_tasks) - len(shown)} more open tasks)")
+        upcoming += [(t["deadline"], p["name"], t) for t in open_tasks if t.get("deadline") and t["deadline"] <= soon]
     upcoming.sort(key=lambda u: u[0])
     if upcoming:
-        lines.append(f"Tasks overdue or due in the next {SOON_DAYS} days:")
-        for deadline, name, t in upcoming[:count]:
-            comments = len(t["comments"])
-            lines.append(f"- {t['title']} ({name}; {_when(deadline, today)}"
-                         + (f"; {comments} comment{'s' if comments != 1 else ''}" if comments else "") + ")")
-        if len(upcoming) > count:
-            lines.append(f"(+{len(upcoming) - count} more)")
+        lines.append(f"Overdue or due in the next {SOON_DAYS} days: "
+                     + "; ".join(f"{t['title']} ({name}, {_when(deadline, today)})" for deadline, name, t in upcoming))
     else:
         lines.append(f"No tasks overdue or due in the next {SOON_DAYS} days.")
     return "\n".join(lines)

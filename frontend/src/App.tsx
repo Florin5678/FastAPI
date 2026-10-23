@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, ApiError, type Me } from './api'
 import { SignIn } from './components/SignIn'
+import { GoogleBanner } from './components/GoogleBanner'
 import { Digest } from './widgets/email/Digest'
 import { Inbox } from './widgets/email/Inbox'
 import { EmailDetail } from './widgets/email/EmailDetail'
@@ -125,6 +126,7 @@ export default function App() {
         </div>
       </header>
 
+      <GoogleBanner google={me.google} />
       <main className={tab === 'home' ? 'content wide' : 'content'}>
         {tab === 'home' && <Dashboard refreshKey={refreshKey} actions={actions} onNotice={showNotice} />}
         {tab === 'today' && <Digest refreshKey={refreshKey} onOpen={setOpenEmailId} />}

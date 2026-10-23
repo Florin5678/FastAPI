@@ -56,9 +56,10 @@ def test_briefing_lists_overdue_and_upcoming_tasks():
         ]}], "completed": []}
     text = projects.brief(data)
     assert "Thesis: 1/4 tasks done" in text
-    assert "Outline (Thesis; OVERDUE since Sun 18 Oct; 1 comment)" in text
-    assert "Read papers (Thesis; due tomorrow)" in text
-    assert "Old" not in text and "Later" not in text
+    assert '  - Outline (OVERDUE since Sun 18 Oct; 1 comment, latest: "x")' in text  # every open task, in order
+    assert "  - Later (due " in text and "Old" not in text  # completed tasks are left out
+    assert "Overdue or due in the next 7 days: Outline (Thesis, OVERDUE since Sun 18 Oct); Read papers (Thesis, due tomorrow)" in text
+    assert "(+1 more open tasks)" in projects.brief(data, limit=2)
 
 
 def test_claude_can_manage_projects_tasks_and_comments_and_undo(claude, db, user):
