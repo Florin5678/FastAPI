@@ -15,11 +15,11 @@ class ConfigField:
     """One user-editable setting, rendered as a form field by the frontend."""
     key: str
     label: str
-    type: Literal["number", "boolean", "select", "text"]
+    type: Literal["number", "boolean", "select", "text", "multi"]  # multi: any of the options (a list)
     default: Any
     min: Optional[float] = None
     max: Optional[float] = None
-    options: Optional[list[str]] = None  # for type="select"
+    options: Optional[list[str]] = None  # for type="select" / "multi"
 
     def validate(self, value: Any) -> Any:
         if self.type == "number":
@@ -34,6 +34,10 @@ class ConfigField:
             if not isinstance(value, bool):
                 raise ValueError(f"{self.label} must be true or false")
             return value
+        if self.type == "multi":
+            if not isinstance(value, list) or any(v not in (self.options or []) for v in value):
+                raise ValueError(f"{self.label} must be a list of {self.options}")
+            return [o for o in (self.options or []) if o in value]  # in the options' order, no repeats
         if self.type == "select":
             if value not in (self.options or []):
                 raise ValueError(f"{self.label} must be one of {self.options}")

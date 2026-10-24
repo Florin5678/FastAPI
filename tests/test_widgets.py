@@ -128,3 +128,22 @@ def test_weight_change_is_measured_from_a_real_earlier_entry(db, user):
     assert s["change_week"] == {"kg": 1.0, "since": "2026-09-02"}
     assert s["change_month"] == {"kg": 1.6, "since": "2026-08-20"}
     assert s["to_goal"] == 3.6
+
+
+# ---- Email ----
+
+def test_email_tile_shows_only_the_chosen_categories(client, db, user):
+    from datetime import timedelta as td
+
+    from app.models import Email, Integration
+    db.add(Integration(user_id=user.id, app_name="email_summary", status="active", config={}))
+    now = datetime.utcnow()
+    for i, category in enumerate(["work", "promotion", None]):
+        db.add(Email(user_id=user.id, gmail_id=f"g{i}", subject=f"s{i}", category=category, timestamp=now - td(minutes=i)))
+    db.commit()
+    params = {"tz": "UTC", "since": (now - td(hours=1)).isoformat()}
+    r = client.patch("/widgets/email_summary/settings", json={"settings": {"categories": ["work", "unsummarized", "work"]}})
+    assert r.status_code == 200 and r.json()["settings"]["categories"] == ["work", "unsummarized"]
+    data = client.get("/widgets/email_summary/data", params=params).json()["data"]
+    assert [e["subject"] for e in data["latest"]] == ["s0", "s2"] and data["hidden_today"] == 1
+    assert client.patch("/widgets/email_summary/settings", json={"settings": {"categories": ["spam"]}}).status_code == 422

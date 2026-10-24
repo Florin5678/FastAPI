@@ -29,7 +29,6 @@ export default function App() {
   const [inboxCategory, setInboxCategory] = useState<string | undefined>(undefined)
   const [openEmailId, setOpenEmailId] = useState<number | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
-  const [syncing, setSyncing] = useState(false)
   const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null)
 
   useEffect(() => {
@@ -60,25 +59,6 @@ export default function App() {
     const timer = setTimeout(() => setNotice(null), 6000)
     return () => clearTimeout(timer)
   }, [notice])
-
-  const sync = useCallback(async () => {
-    setSyncing(true)
-    try {
-      const synced = await api.sync()
-      let text = synced.synced === 0 ? 'No new emails' : `${synced.synced} new email${synced.synced === 1 ? '' : 's'}`
-      if (me?.summaries_enabled && synced.synced > 0) {
-        const summarized = await api.summarize()
-        text += `, ${summarized.summarized} summarized`
-        if (summarized.remaining) text += ` (${summarized.remaining} still waiting)`
-      }
-      setNotice({ text })
-      setRefreshKey((k) => k + 1)
-    } catch (err) {
-      setNotice({ text: `Sync failed: ${(err as Error).message}`, error: true })
-    } finally {
-      setSyncing(false)
-    }
-  }, [me])
 
   const showNotice = useCallback((text: string, error?: boolean) => setNotice({ text, error }), [])
 
@@ -118,9 +98,6 @@ export default function App() {
           <button className="button ghost back" onClick={() => setTab('home')}>← Dashboard</button>
         )}
         <div className="topbar-actions">
-          <button className="button primary" onClick={sync} disabled={syncing}>
-            {syncing ? 'Syncing…' : 'Sync now'}
-          </button>
           <span className="user" title={me.email}>{me.name || me.email}</span>
           <button className="button ghost" onClick={logout}>Sign out</button>
         </div>

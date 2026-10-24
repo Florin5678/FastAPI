@@ -5,7 +5,7 @@ import { localMidnightIso } from '../lib/dates'
 export type ConfigField = {
   key: string
   label: string
-  type: 'number' | 'boolean' | 'select' | 'text'
+  type: 'number' | 'boolean' | 'select' | 'text' | 'multi' // multi: a list of the options
   default: unknown
   min?: number
   max?: number

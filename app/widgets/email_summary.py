@@ -1,19 +1,35 @@
-# Email summary widget: today's mail at a glance (counts per category + latest emails)
+# Email summary widget: today's mail at a glance (counts per category + latest emails), in the
+# categories the user chose to show (the Assistant's briefing has its own email filters)
 import re
 from datetime import datetime, timedelta
+from typing import get_args
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.timeutil import DASHBOARD_TZ
 from app.models import Email, User
-from app.mail.summarize import get_client
+from app.mail.summarize import Category, get_client
 from app.widgets.registry import ConfigField, WidgetContext, WidgetDefinition, register
+
+# Categories the tile can show ("unsummarized": not categorized yet)
+CATEGORIES = [*get_args(Category), "unsummarized"]
+
+
+def _in_categories(chosen: list[str]):
+    """SQL filter: emails in the chosen categories (uncategorized ones count as "unsummarized")."""
+    named = [c for c in chosen if c != "unsummarized"]
+    condition = Email.category.in_(named)
+    return or_(condition, Email.category.is_(None)) if "unsummarized" in chosen else condition
 
 
 def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
+    chosen = settings["categories"]
+    hidden = [c for c in CATEGORIES if c not in chosen]
     today = db.query(Email).filter(Email.user_id == user.id, Email.timestamp >= ctx.since)
+    hidden_today = today.filter(~_in_categories(chosen)).count() if hidden else 0
+    today = today.filter(_in_categories(chosen))
 
     counts = (
         today.with_entities(Email.category, func.count(Email.id))
@@ -27,7 +43,7 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
 
     latest = (
         db.query(Email)
-        .filter(Email.user_id == user.id)
+        .filter(Email.user_id == user.id, _in_categories(chosen))
         .order_by(Email.timestamp.desc())
         .limit(settings["max_items"])
         .all()
@@ -44,7 +60,8 @@ def fetch(db: Session, user: User, settings: dict, ctx: WidgetContext) -> dict:
     zone = ZoneInfo(ctx.tz or DASHBOARD_TZ)
 
     return {
-        "today_total": sum(c["count"] for c in categories),
+        "today_total": sum(c["count"] for c in categories),  # in the chosen categories
+        "hidden_today": hidden_today,  # today's emails in categories the user hid
         "categories": categories if settings["show_categories"] else [],
         "latest": [
             {
@@ -123,5 +140,6 @@ register(WidgetDefinition(
     config_fields=(
         ConfigField("max_items", "Emails to show", "number", default=5, min=1, max=15),
         ConfigField("show_categories", "Show category counts", "boolean", default=True),
+        ConfigField("categories", "Categories to show", "multi", default=CATEGORIES, options=CATEGORIES),
     ),
 ))

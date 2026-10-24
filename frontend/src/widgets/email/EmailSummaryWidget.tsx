@@ -1,5 +1,8 @@
+import { useState } from 'react'
+import { api } from '../../api'
 import { categoryLabel, formatTime, senderName } from '../../lib/format'
 import { CategoryBadge } from './EmailCard'
+import { EmailSettingsDialog } from './EmailSettingsDialog'
 import type { WidgetProps } from '../types'
 import './email.css'
 
@@ -17,18 +20,53 @@ export type EmailSummaryData = {
   }[]
   summaries_enabled: boolean
   last_new_mail_at: string | null
+  hidden_today: number // today's emails in categories hidden in the settings
 }
 
-export function EmailSummaryWidget({ data, actions }: WidgetProps<EmailSummaryData>) {
+export function EmailSummaryWidget({ data, actions, settings, updateSettings }: WidgetProps<EmailSummaryData>) {
+  const [syncing, setSyncing] = useState(false)
+  const [status, setStatus] = useState<{ text: string; error?: boolean } | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   // Only real categories: emails without a summary yet don't get a chip
   const categories = data.categories.filter((c) => c.category !== 'unsummarized')
 
+  // Fetch new mail from Gmail (and summarize it), then refresh the dashboard
+  const sync = async () => {
+    setSyncing(true)
+    setStatus(null)
+    try {
+      const synced = await api.sync()
+      let text = synced.synced === 0 ? 'No new emails' : `${synced.synced} new email${synced.synced === 1 ? '' : 's'}`
+      if (data.summaries_enabled && synced.synced > 0) {
+        const summarized = await api.summarize()
+        text += `, ${summarized.summarized} summarized`
+        if (summarized.remaining) text += ` (${summarized.remaining} still waiting)`
+      }
+      setStatus({ text })
+      actions.refresh()
+    } catch (err) {
+      setStatus({ text: `Sync failed: ${(err as Error).message}`, error: true })
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   return (
     <div className="email-widget">
-      <button className="stat" onClick={() => actions.goTo('today')}>
-        <span className="stat-number">{data.today_total}</span>
-        <span className="stat-label">email{data.today_total === 1 ? '' : 's'} today</span>
-      </button>
+      <div className="email-head">
+        <button className="stat" onClick={() => actions.goTo('today')}>
+          <span className="stat-number">{data.today_total}</span>
+          <span className="stat-label">email{data.today_total === 1 ? '' : 's'} today</span>
+        </button>
+        <span className="email-head-actions">
+          <button className="button primary small-button" onClick={sync} disabled={syncing}>{syncing ? 'Syncing…' : 'Sync now'}</button>
+          <button className="icon-button" onClick={() => setSettingsOpen(true)} aria-label="Email settings" title="Settings: categories to show">⚙</button>
+        </span>
+      </div>
+      {status && <p className={status.error ? 'error-text small' : 'muted small'} role="status">{status.text}</p>}
+      {data.hidden_today > 0 && (
+        <p className="muted small">{data.hidden_today} more today in hidden categories</p>
+      )}
 
       {categories.length > 0 && (
         <div className="chips compact">
@@ -73,6 +111,7 @@ export function EmailSummaryWidget({ data, actions }: WidgetProps<EmailSummaryDa
         <button className="link" onClick={() => actions.goTo('today')}>Today's digest →</button>
         <button className="link" onClick={() => actions.goTo('inbox')}>Inbox →</button>
       </div>
+      {settingsOpen && <EmailSettingsDialog settings={settings} onSave={updateSettings} onClose={() => setSettingsOpen(false)} />}
     </div>
   )
 }
